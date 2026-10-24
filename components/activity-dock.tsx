@@ -485,9 +485,15 @@ function ActivityBlobRow({
 								<span className="tabular-nums text-card-foreground">{blob.steps}</span>
 							</div>
 						)}
-						<a href={`/chat/${blob.chatId}`} className="text-primary hover:underline">
-							Open session →
-						</a>
+						{blob.chatId.startsWith("src_") ? (
+							<a href="/" className="text-primary hover:underline">
+								View graph →
+							</a>
+						) : (
+							<a href={`/chat/${blob.chatId}`} className="text-primary hover:underline">
+								Open session →
+							</a>
+						)}
 					</div>
 					<div className="mt-2 text-muted-foreground/80">
 					{abortState === "failed" && "Abort failed — try again"}
