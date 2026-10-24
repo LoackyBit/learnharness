@@ -68,7 +68,10 @@ import { danglingQuestionOf, endsInDismissal, type LhMessage } from "../core/nat
 import { fireJobAbort, isJobLive } from "../agent/subagents/aborts.ts";
 import { stores } from "./stores.ts";
 import { isTurnRunning } from "./turn-liveness.ts";
-import type { Agent } from "@earendil-works/pi-agent-core";
+
+export interface LiveAgent {
+	steer(message: any): void;
+}
 
 /** Fires one server-side teacher turn: (chatId, input) → HTTP-ish status.
  *  Wave C: the input is the IDLE WAKE — every queued marker as the turn's
@@ -87,7 +90,7 @@ interface QueuedSteer {
 	 *  the hand-off helper. Guards double-handoff (a re-pumped loop or a
 	 *  re-registered run must not re-queue what a run already holds) and is
 	 *  CLEARED at settlement for markers the dying run never injected. */
-	handedTo?: Agent;
+	handedTo?: LiveAgent;
 }
 
 interface WakeState {
@@ -106,7 +109,7 @@ interface WakeState {
 	/** chatId → the agent of the CURRENTLY streaming turn (cleared at
 	 *  settlement, before settleSteers). The pump's live path hands
 	 *  markers to this agent's follow-up queue. */
-	liveAgents: Map<string, Agent>;
+	liveAgents: Map<string, LiveAgent>;
 	/** Chats whose pump loop is currently active (serialization per chat). */
 	pumping: Set<string>;
 	/** Throttle bookkeeping for the stale-job sweep. */
@@ -210,7 +213,8 @@ export function deliverJobResult(steer: SteerMessage): Promise<void> {
  *  beats the loop's synchronous start-poll drain and the marker rides the
  *  run's FIRST LLM call (the native equivalent of the old continuation
  *  coalescing). */
-function handOffEligible(chatId: string, agent: Agent): void {
+function handOffEligible(chatId: string, agent: LiveAgent): void {
+	if (!agent || typeof agent.steer !== "function") return;
 	const queue = state().queues.get(chatId);
 	if (queue && queue.length > 0) {
 		for (const entry of queue) {
@@ -241,7 +245,7 @@ function handOffEligible(chatId: string, agent: Agent): void {
  *  markers are steered into the run right here. The settle seam cannot
  *  beat the registration: settlement needs a streamed response, which
  *  never happens inside the constructor call. */
-export function registerLiveAgent(chatId: string, agent: Agent): void {
+export function registerLiveAgent(chatId: string, agent: LiveAgent): void {
 	state().liveAgents.set(chatId, agent);
 	handOffEligible(chatId, agent);
 }
@@ -251,7 +255,7 @@ export function registerLiveAgent(chatId: string, agent: Agent): void {
  *  never landed in the persisted record). */
 export interface UserSteerEntry {
 	message: LhMessage;
-	handedTo?: Agent;
+	handedTo?: LiveAgent;
 }
 
 /** The steer route's live hand-off (composer steering, 2026-10-03).
@@ -264,7 +268,7 @@ export interface UserSteerEntry {
  *  chat's next run. */
 export function steerLiveChat(chatId: string, message: LhMessage): boolean {
 	const agent = state().liveAgents.get(chatId);
-	if (!agent) return false;
+	if (!agent || typeof agent.steer !== "function") return false;
 	const entry: UserSteerEntry = { message };
 	const q = state().userSteers.get(chatId) ?? [];
 	q.push(entry);
@@ -460,7 +464,7 @@ async function pump(chatId: string): Promise<void> {
 			// run. Delivery resolves at settlement (settleSteers). Nothing else
 			// to do in this loop iteration — the turn owns the delivery.
 			const live = s.liveAgents.get(chatId);
-			if (live && isTurnRunning(chatId)) {
+			if (live && typeof live.steer === "function" && isTurnRunning(chatId)) {
 				handOffEligible(chatId, live);
 				const handable = stillPending.filter((e) => e.handedTo === live);
 				// probe-handoffs never ride a live run (owner ruling: the

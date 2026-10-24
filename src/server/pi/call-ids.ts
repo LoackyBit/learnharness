@@ -36,11 +36,23 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 /** Structurally walk any message's content for tool-call blocks. */
 function callBlocks(message: unknown): Array<{ id: string } & Record<string, unknown>> {
 	const content = (message as { content?: unknown } | undefined)?.content;
-	if (!Array.isArray(content)) return [];
-	return content.filter(
-		(b): b is { id: string } & Record<string, unknown> =>
-			(b as { type?: string } | null)?.type === "toolCall" && typeof (b as { id?: unknown }).id === "string",
-	);
+	const blocks: Array<{ id: string } & Record<string, unknown>> = [];
+	if (Array.isArray(content)) {
+		for (const b of content) {
+			if ((b as { type?: string } | null)?.type === "toolCall" && typeof (b as { id?: unknown }).id === "string") {
+				blocks.push(b as { id: string } & Record<string, unknown>);
+			}
+		}
+	}
+	const toolCalls = (message as { toolCalls?: unknown } | undefined)?.toolCalls;
+	if (Array.isArray(toolCalls)) {
+		for (const b of toolCalls) {
+			if (typeof (b as { id?: unknown })?.id === "string") {
+				blocks.push(b as { id: string } & Record<string, unknown>);
+			}
+		}
+	}
+	return blocks;
 }
 
 /** The ids every consumer may already have seen: all call ids and result
@@ -111,20 +123,42 @@ export class ToolCallIdUniquifier {
 		}
 
 		let changed = false;
-		const content = (message as { content: unknown[] }).content.map((block) => {
-			if ((block as { type?: string }).type !== "toolCall") return block;
-			const orig = (block as { id?: unknown }).id;
-			if (typeof orig !== "string") return block;
-			let mapped = table!.get(orig);
-			if (mapped === undefined) {
-				mapped = this.claim(orig);
-				table!.set(orig, mapped);
-			}
-			if (mapped === orig) return block;
-			changed = true;
-			return { ...(block as object), id: mapped };
-		});
-		return changed ? { ...(message as object), content } : message;
+		const rawContent = (message as { content?: unknown[] }).content;
+		let content = rawContent;
+		if (Array.isArray(rawContent)) {
+			content = rawContent.map((block) => {
+				if ((block as { type?: string }).type !== "toolCall") return block;
+				const orig = (block as { id?: unknown }).id;
+				if (typeof orig !== "string") return block;
+				let mapped = table!.get(orig);
+				if (mapped === undefined) {
+					mapped = this.claim(orig);
+					table!.set(orig, mapped);
+				}
+				if (mapped === orig) return block;
+				changed = true;
+				return { ...(block as object), id: mapped };
+			});
+		}
+
+		const rawToolCalls = (message as { toolCalls?: unknown[] }).toolCalls;
+		let toolCalls = rawToolCalls;
+		if (Array.isArray(rawToolCalls)) {
+			toolCalls = rawToolCalls.map((block) => {
+				const orig = (block as { id?: unknown }).id;
+				if (typeof orig !== "string") return block;
+				let mapped = table!.get(orig);
+				if (mapped === undefined) {
+					mapped = this.claim(orig);
+					table!.set(orig, mapped);
+				}
+				if (mapped === orig) return block;
+				changed = true;
+				return { ...(block as object), id: mapped };
+			});
+		}
+
+		return changed ? { ...(message as object), ...(Array.isArray(rawContent) ? { content } : {}), ...(Array.isArray(rawToolCalls) ? { toolCalls } : {}) } : message;
 	}
 
 	/** Every AgentEvent, ids uniquified. Structural and total: unknown
@@ -143,18 +177,23 @@ export class ToolCallIdUniquifier {
 			case "message_end":
 				return this.remapEventMessage(event);
 			case "tool_execution_start":
-			case "tool_execution_update":
-			case "tool_execution_end": {
+			case "tool_execution_update": {
 				const { toolCallId } = event as { toolCallId: string };
 				const mapped = this.epoch?.get(toolCallId) ?? toolCallId;
 				if (mapped === toolCallId) return event;
 				return { ...(event as object), toolCallId: mapped } as AgentEvent;
 			}
+			case "tool_execution_end": {
+				const { toolCallId } = event as { toolCallId: string };
+				const mapped = this.epoch?.get(toolCallId) ?? toolCallId;
+				const isError = Boolean((event as { isError?: boolean }).isError);
+				return { ...(event as object), toolCallId: mapped, isError } as AgentEvent;
+			}
 			case "turn_end": {
-				const e = event as { message: unknown; toolResults: Array<{ toolCallId?: string }> };
+				const e = event as { message: unknown; toolResults?: Array<{ toolCallId?: string }> };
 				const message = this.remapMessageContent(e.message);
 				const table = this.epoch;
-				const toolResults = table
+				const toolResults = table && Array.isArray(e.toolResults)
 					? e.toolResults.map((r) =>
 							typeof r.toolCallId === "string" && table.has(r.toolCallId)
 								? { ...r, toolCallId: table.get(r.toolCallId)! }

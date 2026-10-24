@@ -18,13 +18,29 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type { LhMessage } from "../core/native-messages.ts";
-import { newMessageId } from "../core/native-messages.ts";
+import { newMessageId, newPlanBlockMessage } from "../core/native-messages.ts";
 import { QUESTION_TOOLS } from "../core/pending.ts";
-import { planBlocksFor } from "../core/plan-blocks.ts";
+import { planBlocksFor, emittedPlanBlockCalls } from "../core/plan-blocks.ts";
+import { derivePlanStatusesLh, type PlanBlockData, type PlanTree } from "../core/contracts.ts";
 import { coverageOf } from "../core/coverage.ts";
 import type { ChatStore, GraphStore } from "../core/ports.ts";
 import type { ExtractionPipeline } from "../agent/subagents/extraction.ts";
 import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/settings.ts";
+
+function snapshot(tree: PlanTree, messages: readonly LhMessage[]): PlanBlockData {
+	const statuses = derivePlanStatusesLh(tree, messages);
+	return {
+		kind: "full",
+		at: new Date().toISOString(),
+		current: statuses.current,
+		nodes: tree.nodes.map((n) => ({
+			id: n.id,
+			title: n.title,
+			status: statuses.current === n.id ? "current" : statuses.visited.has(n.id) ? "visited" : "upcoming",
+		})),
+		edges: tree.edges.map((e) => ({ from: e.from, to: e.to })),
+	};
+}
 
 /**
  * The canonical state write (Wave B, owner-approved 2026-09-26): append the
@@ -43,7 +59,8 @@ import { ModelsNotConfiguredError, ProviderKeyMissingError } from "../core/setti
  *   result). Errored question calls DO persist — the model's retry
  *   context.
  * - Plan blocks: one frozen snapshot per successful plan_init call,
- *   idempotent (persist replays are safe).
+ *   idempotent (persist replays are safe). Synthesized across both Pi and
+ *   Antigravity turn engines.
  *
  * Returns the stamped new messages (usage provenance reads them).
  */
@@ -51,7 +68,7 @@ export function persistTurn(
 	chatStore: ChatStore,
 	chatId: string,
 	baseCount: number,
-	turnMessages: readonly AgentMessage[],
+	turnMessages: readonly (AgentMessage | any)[],
 	isAborted: boolean,
 ): LhMessage[] {
 	try {
@@ -68,13 +85,64 @@ export function persistTurn(
 			) {
 				continue;
 			}
-			stamped.push(message.id ? message : ({ ...message, id: newMessageId() } as LhMessage));
+			const id = typeof message.id === "string" && message.id.trim() ? message.id : newMessageId();
+			stamped.push({ ...message, id } as LhMessage);
 		}
-		const tree = record.tree;
-		const blocks = planBlocksFor(record.messages, stamped, tree, [
+
+		let currentTree = record.tree;
+		// If plan_init was called in an assistant message, save the tree if not already saved
+		for (const m of stamped) {
+			if ((m as { role?: string }).role === "assistant") {
+				const content = (m as { content?: unknown[] }).content;
+				if (Array.isArray(content)) {
+					for (const part of content) {
+						if ((part as any)?.type === "toolCall" && (part as any)?.name === "plan_init") {
+							const rawArgs = (part as any).arguments;
+							const candidateTree = rawArgs?.tree ?? rawArgs;
+							if (candidateTree && Array.isArray(candidateTree.nodes) && candidateTree.nodes.length > 0) {
+								const nextTree: PlanTree = {
+									nodes: candidateTree.nodes,
+									edges: Array.isArray(candidateTree.edges) ? candidateTree.edges : [],
+									version: 1,
+								};
+								chatStore.saveTree(chatId, nextTree);
+								currentTree = nextTree;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		let blocks = planBlocksFor(record.messages, stamped, currentTree, [
 			...record.messages,
 			...stamped,
 		]);
+		if (blocks.length === 0 && currentTree && currentTree.nodes.length > 0) {
+			const emitted = emittedPlanBlockCalls(record.messages);
+			let lastPlanCallId: string | null = null;
+			for (const m of stamped) {
+				if ((m as { role?: string }).role === "assistant") {
+					const content = (m as { content?: unknown[] }).content;
+					if (Array.isArray(content)) {
+						for (const part of content) {
+							if (
+								(part as any)?.type === "toolCall" &&
+								(part as any)?.name === "plan_init" &&
+								typeof (part as any)?.id === "string" &&
+								!emitted.has((part as any).id)
+							) {
+								lastPlanCallId = (part as any).id;
+							}
+						}
+					}
+				}
+			}
+			if (lastPlanCallId) {
+				blocks = [newPlanBlockMessage(lastPlanCallId, snapshot(currentTree, [...record.messages, ...stamped]))];
+			}
+		}
+
 		chatStore.saveMessages(chatId, [...record.messages, ...stamped, ...blocks]);
 		return stamped;
 	} catch (err) {
