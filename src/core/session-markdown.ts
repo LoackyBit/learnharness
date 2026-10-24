@@ -26,7 +26,7 @@ import {
 	PRACTICE_PROBLEM_TOOL,
 	problemInputForConclude,
 } from "./native-messages.ts";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolResultMessage } from "./contracts/messages.ts";
 
 /** The user-facing text blocks of a native message (string or text parts). */
 function textOf(content: unknown): string[] {

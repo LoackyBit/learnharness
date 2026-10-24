@@ -32,7 +32,7 @@
  * Pure and deterministic: client-safe (no node deps), same input → same view.
  */
 
-import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolResultMessage } from "./contracts/messages.ts";
 import type { LhMarkerMessage, LhMessage } from "./native-messages.ts";
 import { modelSolutionForConclude, PRACTICE_CONCLUDE_TOOL, problemInputForConclude } from "./native-messages.ts";
 import { activeCompactionOf, type CompactionDetails } from "./compaction.ts";

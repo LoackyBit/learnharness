@@ -33,8 +33,21 @@
  * question gate holds steers; a POST would 409).
  */
 
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Message, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type {
+	AgentMessage,
+	AssistantMessage,
+	Message,
+	ToolResultMessage,
+	UserMessage,
+} from "./contracts/messages.ts";
+
+export type {
+	AgentMessage,
+	AssistantMessage,
+	Message,
+	ToolResultMessage,
+	UserMessage,
+};
 import { QUESTION_TOOLS } from "./pending.ts";
 import {
 	CONCLUDE_ACK_TEXT,
@@ -54,15 +67,14 @@ export const INTERRUPTED_TEXT =
 // ─── The record's message type ───────────────────────────────────────────────
 
 /**
- * The app's custom message (declaration-merged into pi-agent-core's
- * CustomAgentMessages below). Shaped like pi's own CustomMessage —
+ * The app's custom message. Shaped like a custom message —
  * `content` is the MODEL-facing text (single-sourced in core/contracts,
  * never fake human speech), `details` is the UI payload (never
  * model-visible), `display` marks messages the UI renders (our projection
  * keys rendering on customType; the flag documents intent).
  */
 export interface LhMarkerMessage {
-	/** Record identity (pi messages carry no id — see the file header). */
+	/** Record identity (native messages carry no id — see the file header). */
 	id: string;
 	role: "custom";
 	customType:
@@ -83,13 +95,13 @@ export interface LhMarkerMessage {
 	timestamp: number;
 }
 
-declare module "@earendil-works/pi-agent-core" {
+declare module "./contracts/messages.ts" {
 	interface CustomAgentMessages {
 		lhMarker: LhMarkerMessage;
 	}
 }
 
-/** A record message: a native pi message (or our marker) plus the record id. */
+/** A record message: a native message (or our marker) plus the record id. */
 export type LhMessage = (UserMessage | AssistantMessage | ToolResultMessage | LhMarkerMessage) & { id: string };
 
 /** A record message list is assignable to the agent's context — that IS

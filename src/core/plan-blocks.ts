@@ -19,7 +19,7 @@ import type { PlanBlockData, PlanTree } from "./contracts.ts";
 import { derivePlanStatusesLh } from "./contracts.ts";
 import type { LhMessage } from "./native-messages.ts";
 import { newPlanBlockMessage } from "./native-messages.ts";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolResultMessage } from "./contracts/messages.ts";
 
 /** The message part the chat renderer consumes (TeacherUIDataParts key
  *  "plan-block" — the SDK strips the `data-` prefix). Kept for the client
