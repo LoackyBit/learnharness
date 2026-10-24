@@ -25,7 +25,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import { after, describe, it } from "node:test";
-import { createFauxCore, fauxAssistantMessage, fauxToolCall, type FauxResponseStep, type ToolCall, type Usage } from "@earendil-works/pi-ai";
+import type { ToolCall, Usage } from "@/src/core";
 import type { PiEngine } from "../src/agent/models.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
 import { newPlanBlockMessage } from "../src/core/native-messages.ts";
@@ -67,14 +67,85 @@ import { PATHS } from "../config.ts";
 
 const createdChats: string[] = [];
 
-/** A scripted pi engine (faux provider, docs/pi-engine-swap.md §7): the
- *  response queue replaces the old doGenerate turn counter. Usage is
- *  ESTIMATED by faux from the prompt/response text (deterministic, > 0) —
- *  the tests assert structure and positivity, not flat mock numbers. */
+export type FauxResponseStep =
+	| ((context: any, options?: any, state?: any, model?: any) => any)
+	| { role?: string; content?: any; [key: string]: any };
+
+export function fauxToolCall(
+	name: string,
+	args: Record<string, unknown> = {},
+	opts?: { id?: string },
+): ToolCall {
+	return {
+		type: "toolCall",
+		id: opts?.id ?? `call_${name}_${Math.random().toString(36).slice(2, 9)}`,
+		name,
+		arguments: args,
+	};
+}
+
+export function fauxAssistantMessage(
+	content: string | unknown[],
+	opts?: { stopReason?: "stop" | "toolUse" | "length" | "abort" | "error" },
+): any {
+	const contentArr = typeof content === "string" ? [{ type: "text", text: content }] : content;
+	const hasTool = Array.isArray(contentArr) && contentArr.some((c: any) => c.type === "toolCall");
+	return {
+		role: "assistant",
+		content: contentArr,
+		stopReason: opts?.stopReason ?? (hasTool ? "toolUse" : "stop"),
+		usage: {
+			input: 25,
+			output: 15,
+			cacheRead: 0,
+			cacheWrite: 5,
+			totalTokens: 40,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			reasoning: 0,
+		},
+		durationMs: 5,
+		timestamp: Date.now(),
+	};
+}
+
+async function resolveStep(step: any, context: any, streamOptions: any, model: any): Promise<any> {
+	let current = step;
+	while (typeof current === "function") {
+		current = await current(context, streamOptions, {}, model);
+	}
+	return current;
+}
+
+/** A scripted fake engine to test extraction pipeline deterministically with subagent runner mocks. */
 function fauxEngine(steps: FauxResponseStep[]): PiEngine {
-	const faux = createFauxCore({});
-	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	const queue = [...steps];
+	const model = {
+		id: "faux-1",
+		name: "Faux Model 1",
+		provider: "faux",
+		reasoning: false,
+		input: ["text", "image"] as ("text" | "image")[],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128000,
+		maxTokens: 16384,
+	};
+	return {
+		model,
+		streamFn: (_requestModel, context, streamOptions) => {
+			const step = queue.shift();
+			const resultPromise = (async () => {
+				if (!step) {
+					return fauxAssistantMessage("No more faux responses queued", { stopReason: "stop" });
+				}
+				const resolved = await resolveStep(step, context, streamOptions, model);
+				return resolved;
+			})();
+			return {
+				result: () => resultPromise,
+				then: (onFulfilled: any, onRejected: any) => resultPromise.then(onFulfilled, onRejected),
+			};
+		},
+	};
 }
 
 /** An in-memory GraphStore (core/ports.ts) — this suite never touches data/graph. */
@@ -878,7 +949,7 @@ describe("the extraction pipeline (extractor → auditor → merger)", () => {
 			...engine,
 			streamFn: (model, context, options) => {
 				const stream = engine.streamFn(model, context, options);
-				void stream.result().then((message) => nativeUsage[stage].push(message.usage));
+				void stream.result().then((message: any) => nativeUsage[stage].push(message.usage));
 				return stream;
 			},
 		});
@@ -907,7 +978,7 @@ describe("the extraction pipeline (extractor → auditor → merger)", () => {
 		const run = record.extractions![0]!;
 		assert.equal(run.stats?.nodes, 1); // p2 created; p1 linked, not created
 		// the scripted engine's model, provider-qualified (model slots wave)
-		assert.equal(run.stages.extractor.model, "faux:faux-1");
+		assert.equal(run.stages.extractor.model, "antigravity:faux-1");
 		assert.equal(run.stages.extractor.steps.length, 1); // the submit call — the run STOPS after a clean submit
 		const step = run.stages.extractor.steps[0]!;
 		assert.ok(step.inputTokens! > 0 && step.outputTokens! > 0, "estimated usage captured");
