@@ -36,7 +36,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useBackdropDismiss } from "@/components/backdrop-dismiss";
 import type React from "react";
-import { type ModelCatalogEntry, type ModelSlotName, type ModelsSettings } from "@/src/core";
+import {
+	type ModelCatalogEntry,
+	type ModelSlotName,
+	type ModelsSettings,
+	type ThinkingLevel,
+} from "@/src/core";
 import { prettyModel } from "@/components/usage-format";
 import { ModelMenuList } from "@/components/settings/model-menu";
 import { MenuShell } from "@/components/menu-shell";
@@ -46,7 +51,6 @@ import { type ProviderKeyInfo } from "@/components/settings/keys-section";
 import { ProviderMenuList } from "@/components/settings/model-menu";
 import { defaultOrderLevel, populateLevel, THINKING_LABEL } from "@/components/thinking-default";
 import { ThinkingMenuList } from "@/components/settings/model-menu";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 /** The pickers' slot identity — same roster language as the Agent
  *  section's slot rows. */
@@ -68,10 +72,13 @@ interface ModelsBody {
 }
 
 /** Pure: which stage the flow opens at — no keyed provider = keys first
- *  (owner's dependency ordering). Exported for tests. */
+ *  (owner's dependency ordering). If Antigravity session is detected, bypass
+ *  Stage 1 and open pickers directly. Exported for tests. */
 export function setupStage(
 	providers: { id: string; keyPresent: boolean }[] | null,
+	antigravity?: { detected: boolean } | null,
 ): "keys" | "pickers" {
+	if (antigravity?.detected) return "pickers";
 	if (providers === null) return "keys"; // fetch failed → the honest fallback
 	return providers.some((p) => p.keyPresent) ? "pickers" : "keys";
 }
@@ -246,6 +253,7 @@ export function SetupDialog({
 	const [keySaving, setKeySaving] = useState(false);
 	const [keyError, setKeyError] = useState<string | null>(null);
 	const [keyMenuOpen, setKeyMenuOpen] = useState(false);
+	const [antigravity, setAntigravity] = useState<{ detected: boolean } | null>(null);
 	// Stage 1's provider-picker trigger wrapper — the shared shell's anchor.
 	// Declared with the other hooks: the early `if (!open) return null` sits
 	// below them all. (Stage 2's slot menus anchor by anchorTestid instead —
@@ -270,7 +278,10 @@ export function SetupDialog({
 		setError(null);
 		fetch("/api/keys")
 			.then((r) => r.json())
-			.then((b: { providers?: ProviderKeyInfo[] }) => setKeyProviders(b.providers ?? []))
+			.then((b: { providers?: ProviderKeyInfo[]; antigravity?: { detected: boolean } }) => {
+				setKeyProviders(b.providers ?? []);
+				if (b.antigravity) setAntigravity(b.antigravity);
+			})
 			.catch(() => setKeyProviders([]));
 		fetch("/api/models")
 			.then((r) => r.json())
@@ -339,7 +350,7 @@ export function SetupDialog({
 
 	if (!open) return null;
 
-	const stage = failed ? "keys" : setupStage(body ? body.providers : null);
+	const stage = failed ? "keys" : setupStage(body ? body.providers : null, antigravity);
 	const allPicked = SLOT_ORDER.every((s) => picked[s]);
 
 	/** Stage 1's save: PUT the pasted key, dispatch the keys signal, and

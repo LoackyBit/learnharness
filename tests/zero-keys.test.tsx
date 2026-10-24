@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { hasProviderKey, strongKeyless, ZeroKeysPill } from "../components/setup-cta.tsx";
+import { hasProviderKey, isZeroKeys, strongKeyless, ZeroKeysPill } from "../components/setup-cta.tsx";
 import type { ModelCatalogResponse } from "../src/core/index.ts";
 import { SetupKeysBody } from "../components/setup-dialog.tsx";
 import { DICTATION_KEYLESS, DEEPGRAM_KEY_ID } from "../components/dictation.tsx";
@@ -45,6 +45,48 @@ describe("hasProviderKey — the zero-keys pill's truth", () => {
 	it("absent provider keys = zero keys (the pill shows)", () => {
 		assert.equal(hasProviderKey([status("OPENROUTER_API_KEY", false)], PROVIDERS), false);
 		assert.equal(hasProviderKey([], PROVIDERS), false);
+	});
+});
+
+describe("isZeroKeys — Antigravity detection truth", () => {
+	it("antigravity session detected = zero-keys pill does NOT show, even without keys", () => {
+		assert.equal(
+			isZeroKeys({
+				keys: [],
+				providers: PROVIDERS,
+				antigravity: { detected: true },
+			}),
+			false,
+		);
+	});
+
+	it("antigravity absent and no keys = zero keys (pill shows)", () => {
+		assert.equal(
+			isZeroKeys({
+				keys: [],
+				providers: PROVIDERS,
+				antigravity: { detected: false },
+			}),
+			true,
+		);
+		assert.equal(
+			isZeroKeys({
+				keys: [],
+				providers: PROVIDERS,
+			}),
+			true,
+		);
+	});
+
+	it("antigravity absent but provider key present = not zero keys", () => {
+		assert.equal(
+			isZeroKeys({
+				keys: [status("OPENROUTER_API_KEY", true, "env")],
+				providers: PROVIDERS,
+				antigravity: { detected: false },
+			}),
+			false,
+		);
 	});
 });
 
@@ -142,6 +184,11 @@ const catalog = (strongProvider: string | null, ...keyedProviders: string[]): Mo
 });
 
 describe("strongKeyless — the pre-send guard's truth (owner interlude, no-orphan-chats)", () => {
+	it("strong pinned to antigravity: guard does NOT fire (local session authentication)", () => {
+		// Antigravity does not require an API key; no external providers keyed
+		assert.equal(strongKeyless(catalog("antigravity")), false);
+	});
+
 	it("strong pinned to a provider whose key is gone: the guard FIRES", () => {
 		// keys exist generally (anthropic), but the strong slot pins openrouter
 		assert.equal(strongKeyless(catalog("openrouter", "anthropic")), true);

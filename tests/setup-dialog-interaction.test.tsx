@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { createRoot, type Root } from "react-dom/client";
 import { parseHTML } from "linkedom";
-import { SetupDialog } from "../components/setup-dialog.tsx";
+import { SetupDialog, setupStage } from "../components/setup-dialog.tsx";
 import type { ModelCatalogEntry } from "../src/core/contracts/models.ts";
 
 // As in render-update-banner: mount real React handlers against an isolated
@@ -39,23 +39,46 @@ const model: ModelCatalogEntry = {
 	contextWindow: 8192,
 	maxTokens: 1024,
 };
+const agyModel: ModelCatalogEntry = {
+	id: "gemini-3.8-flash-high",
+	name: "Gemini 3.8 Flash High",
+	provider: "antigravity",
+	reasoning: true,
+	input: ["text", "image"],
+	supportedLevels: ["low", "medium", "high", "xhigh", "max"],
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	contextWindow: 1048576,
+	maxTokens: 65536,
+};
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let closed = 0;
 let completed = 0;
 
-async function mount({ keyed = false, catalogFails = false } = {}) {
+async function mount({ keyed = false, catalogFails = false, antigravity = false } = {}) {
 	closed = 0;
 	completed = 0;
 	globalThis.fetch = async (input, init) => {
 		assert.equal(init?.method ?? "GET", "GET", "interaction tests must not write data");
 		const path = new URL(String(input), "http://localhost").pathname;
-		if (path === "/api/keys") return Response.json({ providers: [provider], keys: [] });
+		if (path === "/api/keys") {
+			return Response.json({
+				providers: [provider],
+				keys: [],
+				antigravity: antigravity
+					? { detected: true, path: "/Users/lorenzo/.local/bin/agy", status: "connected" }
+					: { detected: false, path: "/Users/lorenzo/.local/bin/agy", status: "not_found" },
+			});
+		}
 		assert.equal(path, "/api/models");
 		if (catalogFails) throw new Error("fixture catalog failure");
+		const models = antigravity ? [agyModel] : (keyed ? [model] : []);
+		const providers = antigravity
+			? [{ id: "antigravity", keyPresent: true }, { ...provider, keyPresent: keyed }]
+			: [{ ...provider, keyPresent: keyed }];
 		return Response.json({
-			providers: [{ ...provider, keyPresent: keyed }],
-			models: keyed ? [model] : [],
+			providers,
+			models,
 			slots: { strong: null, cheap: null, vision: null },
 		});
 	};
@@ -181,5 +204,47 @@ describe("setup polish interactions", () => {
 	it("catalog failure uses the approved two-sentence error", async () => {
 		await mount({ catalogFails: true });
 		assert.ok(element('[data-testid="setup-dialog"]').textContent?.includes("Model catalog could not be loaded. Check the connection and retry."));
+	});
+
+	it("antigravity session detection bypasses Stage 1 and opens Stage 2 pickers directly with Antigravity models", async () => {
+		await mount({ antigravity: true });
+		assert.equal(document.querySelector('[data-testid="setup-stage-keys"]'), null);
+		assert.ok(document.querySelector('[data-testid="setup-stage-pickers"]'));
+
+		// Antigravity models appear in the model menu
+		await click(element('[data-testid="setup-trigger-strong"]'));
+		assert.ok(document.querySelector('[data-testid="setup-menu-strong"]'));
+		assert.ok(document.querySelector('[data-testid="model-option-gemini-3_8-flash-high"]'));
+
+		// Pick model and verify selection
+		await click(element('[data-testid="model-option-gemini-3_8-flash-high"]'));
+		assert.equal(document.querySelector('[data-testid="setup-menu-strong"]'), null);
+		assert.ok(element('[data-testid="setup-trigger-strong"]').textContent?.includes("gemini-3.8-flash-high"));
+
+		// Vision picker also lists Antigravity model (since it supports image input)
+		await click(element('[data-testid="setup-trigger-vision"]'));
+		assert.ok(document.querySelector('[data-testid="setup-menu-vision"]'));
+		assert.ok(document.querySelector('[data-testid="model-option-gemini-3_8-flash-high"]'));
+	});
+
+	it("retains Stage 1 key setup when Antigravity is absent and no provider keys exist", async () => {
+		await mount({ antigravity: false, keyed: false });
+		assert.ok(document.querySelector('[data-testid="setup-stage-keys"]'));
+		assert.equal(document.querySelector('[data-testid="setup-stage-pickers"]'), null);
+		assert.ok(document.querySelector('[data-testid="setup-key-provider"]'));
+	});
+});
+
+describe("setupStage pure helper with Antigravity", () => {
+	it("bypasses Stage 1 if Antigravity session is detected", () => {
+		assert.equal(setupStage(null, { detected: true }), "pickers");
+		assert.equal(setupStage([], { detected: true }), "pickers");
+		assert.equal(setupStage([{ id: "openrouter", keyPresent: false }], { detected: true }), "pickers");
+	});
+
+	it("falls back to provider keys check when Antigravity is absent", () => {
+		assert.equal(setupStage([{ id: "openrouter", keyPresent: false }], { detected: false }), "keys");
+		assert.equal(setupStage([{ id: "openrouter", keyPresent: false }]), "keys");
+		assert.equal(setupStage([{ id: "openrouter", keyPresent: true }], { detected: false }), "pickers");
 	});
 });

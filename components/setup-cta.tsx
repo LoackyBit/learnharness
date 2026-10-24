@@ -34,18 +34,30 @@ export function hasProviderKey(
 	return classifyKeys(statuses, providers).providerRows.some((s) => s.present);
 }
 
+/** Pure: does the /api/keys response indicate zero usable model keys?
+ *  False if an Antigravity local session is detected (zero keys required)
+ *  or if at least one model provider key is present. Exported for tests. */
+export function isZeroKeys(body: {
+	keys?: readonly AuthKeyStatus[];
+	providers?: readonly ProviderKeyInfo[];
+	antigravity?: { detected: boolean } | null;
+}): boolean {
+	if (body.antigravity?.detected) return false;
+	return !hasProviderKey(body.keys ?? [], body.providers);
+}
+
 /** The zero-keys truth for the calling page: TRUE only after a
- *  successful read says no provider key exists (pending and failed
- *  reads render nothing — the pill must never flash on a gap, and a
- *  failed read claiming "zero keys" would be a lie the CTA flow then
- *  leans on). Re-reads on the keys signal. */
+ *  successful read says no provider key exists and no local Antigravity
+ *  session is active (pending and failed reads render nothing — the pill
+ *  must never flash on a gap, and a failed read claiming "zero keys"
+ *  would be a lie the CTA flow then leans on). Re-reads on the keys signal. */
 export function useZeroKeys(): boolean {
 	const [zeroKeys, setZeroKeys] = useState(false);
 	const read = useCallback(() => {
 		fetch("/api/keys")
 			.then((r) => r.json())
-			.then((body: { keys?: AuthKeyStatus[]; providers?: ProviderKeyInfo[] }) => {
-				setZeroKeys(!hasProviderKey(body.keys ?? [], body.providers));
+			.then((body: { keys?: AuthKeyStatus[]; providers?: ProviderKeyInfo[]; antigravity?: { detected: boolean } }) => {
+				setZeroKeys(isZeroKeys(body));
 			})
 			.catch(() => {});
 	}, []);
@@ -85,6 +97,7 @@ export function ZeroKeysPill({ onOpen, inline = false }: { onOpen: () => void; i
 export function strongKeyless(catalog: ModelCatalogResponse | undefined): boolean {
 	const strong = catalog?.slots.strong;
 	if (!strong) return false;
+	if (strong.model.provider === "antigravity") return false;
 	return !catalog.providers.some((p) => p.id === strong.model.provider && p.keyPresent);
 }
 
