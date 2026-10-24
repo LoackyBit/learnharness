@@ -1,4 +1,4 @@
-import type { Usage } from "@earendil-works/pi-ai";
+import type { Usage } from "../core/contracts/messages.ts";
 import {
 	createPracticeAgent,
 	createProberAgent,

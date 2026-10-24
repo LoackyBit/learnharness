@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
-import { validateToolArguments } from "@earendil-works/pi-ai";
+import { validateToolArguments } from "./test-fakes.ts";
 import { problemInputObject } from "../src/agent/tools/practice.ts";
 import { PracticeDock } from "../components/practice-dock.tsx";
 import { QuestionDock } from "../components/question-dock.tsx";

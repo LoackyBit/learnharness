@@ -35,9 +35,7 @@ export interface ModelPrice {
  *  Context-window limits are NOT a table (owner amendment, 2026-09-23):
  *  every meter's denominator reads pi's LIVE catalog (GET /api/models /
  *  the activity feed's server-side join) — missing model, usage-only.
- *  Refresh: bump @earendil-works/pi-ai, then npx tsx scripts/sync-pricing.ts
- *  (reads pi-ai's shipped catalogs — the same source the engine and the
- *  picker use). Forgetting the re-run is exactly how models go unpriced
+ *  Refresh: update ANTIGRAVITY_MODELS or run npx tsx scripts/sync-pricing.ts Forgetting the re-run is exactly how models go unpriced
  *  (deepseek-v4.1-flash, 2026-09-29) — the drift-guard test
  *  (tests/prices-sync.test.ts) fails the gates until you do. */
 export const PRICES: Record<string, ModelPrice> = {
@@ -254,6 +252,12 @@ export const PRICES: Record<string, ModelPrice> = {
 	"anthropic:claude-sonnet-4-6": { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
 	"anthropic:claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
 	"anthropic:claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
+	"antigravity:claude-opus-4-6-thinking": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	"antigravity:claude-sonnet-4-6": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	"antigravity:gemini-3.8-flash-high": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	"antigravity:gemini-3.8-flash-low": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	"antigravity:gemini-3.8-flash-medium": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	"antigravity:gpt-oss-120b-medium": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 	"azure:deepseek-v4-pro": { input: 1.925, output: 3.828, cacheRead: 0.165, cacheWrite: 0 },
 	"azure:gpt-4": { input: 30, output: 60, cacheRead: 0, cacheWrite: 0 },
 	"azure:gpt-4-turbo": { input: 10, output: 30, cacheRead: 0, cacheWrite: 0 },

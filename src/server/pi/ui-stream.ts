@@ -1,7 +1,28 @@
-import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "../../core/contracts/messages.ts";
 import type { SteerMessage } from "../../core/contracts.ts";
 import { noteSteerVisible } from "../jobs.ts";
 import { ToolCallIdUniquifier } from "./call-ids.ts";
+
+export type AgentEvent =
+	| { type: "agent_start" }
+	| { type: "turn_start" }
+	| { type: "message_start"; message: AgentMessage }
+	| { type: "message_update"; message: AgentMessage }
+	| { type: "message_end"; message: AgentMessage }
+	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args?: any }
+	| { type: "tool_execution_update"; toolCallId: string; toolName: string; partialResult?: any }
+	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result?: any; isError?: boolean }
+	| { type: "turn_end"; message?: AgentMessage; toolResults?: any[] }
+	| { type: "agent_end"; messages: AgentMessage[] };
+
+export interface Agent {
+	state: { messages: AgentMessage[] };
+	abort?: () => void;
+	steer?: (message: any) => void;
+	subscribe: (listener: (event: AgentEvent) => void) => () => void;
+	runTurn?: () => Promise<void>;
+	continue?: () => Promise<void>;
+}
 
 /**
  * THE NATIVE WIRE (Wave D, owner-approved 2026-09-26): one agent turn, streamed
@@ -241,7 +262,7 @@ export function runPiTurn(spec: PiTurnSpec): PiTurnHandle {
 			// message_end = the card is visible to the learner — flip the
 			// job's bookkeeping now (the turn may keep teaching for minutes;
 			// settleSteers re-runs the flip as a no-op idempotently).
-			if (m?.role === "custom") noteSteerVisible(event.message as SteerMessage);
+			if (m?.role === "custom") noteSteerVisible(event.message as unknown as SteerMessage);
 		}
 		if (event.type === "agent_end") {
 			closeAll();
@@ -252,7 +273,11 @@ export function runPiTurn(spec: PiTurnSpec): PiTurnHandle {
 
 	void (async () => {
 		try {
-			await agent.continue();
+			if (agent.continue) {
+				await agent.continue();
+			} else if (agent.runTurn) {
+				await agent.runTurn();
+			}
 		} catch (err) {
 			// A loop-level failure (not a provider error — those ride the
 			// stream as stopReason "error"): surface, close, persist. If the
@@ -318,7 +343,7 @@ export function runPiTurn(spec: PiTurnSpec): PiTurnHandle {
 		abort() {
 			if (settled) return;
 			sawAbort = true;
-			agent.abort();
+			agent.abort?.();
 		},
 	};
 }

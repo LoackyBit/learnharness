@@ -64,8 +64,7 @@ const validQuiz = {
 	nodeId: "arith",
 };
 
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../src/agent/tool-execute.ts";
 
 /** The Wave A boundary predicate (2026-09-26): pi's loop structurally
  *  validates against the TypeBox parameters, then execute re-runs the

@@ -22,7 +22,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { validateToolArguments } from "@earendil-works/pi-ai";
+import { validateToolArguments } from "./test-fakes.ts";
 import { healEncodedArguments } from "../src/core/argument-heal.ts";
 import { stripModelValueDebris } from "../src/core/value-debris.ts";
 import {

@@ -15,8 +15,7 @@
  * [chat <id>] — structured logging lands behind these seams later.
  */
 
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AgentMessage, ToolResultMessage } from "../core/contracts/messages.ts";
 import type { LhMessage } from "../core/native-messages.ts";
 import { newMessageId, newPlanBlockMessage } from "../core/native-messages.ts";
 import { QUESTION_TOOLS } from "../core/pending.ts";

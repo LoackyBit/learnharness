@@ -19,6 +19,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ANTIGRAVITY_MODELS } from "../src/agent/models.ts";
 
 const DATA_DIR = path.join(
 	import.meta.dirname,
@@ -36,43 +37,37 @@ const OUT = path.join(import.meta.dirname, "..", "src", "core", "prices.ts");
 interface CatalogModel {
 	id: string;
 	name: string;
-	/** pi-ai 1.0 (catalog schema v6): every entry is type-tagged. */
 	type?: "chat" | "image" | "classifier";
 	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
 /** The pure walk: every catalog entry that carries pricing, keyed
- *  "provider:id". Exported for the drift-guard test (tests/prices-sync)
- *  so the guard asserts EXACTLY what this script would generate — the
- *  test and the generator can never disagree (owner, 2026-09-29). */
+ *  "provider:id". */
 export function buildPrices(): Map<string, CatalogModel["cost"]> {
 	const priced = new Map<string, CatalogModel["cost"]>();
-	for (const file of fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"))) {
-		const provider = file.slice(0, -".json".length);
-		const catalog = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), "utf-8")) as Record<
-			string,
-			Record<string, CatalogModel>
-		>;
-		for (const models of Object.values(catalog)) {
-			for (const [id, m] of Object.entries(models)) {
-				// pi-ai 1.0 (catalog schema v6): keys are type-qualified
-				// ("chat:<id>", "image:<id>", "classifier:<id>") and entries
-				// carry their own `type`. We price CHAT models only — our
-				// usage records are chat — and keys stay "provider:id"
-				// (owner format, 2026-09-20): strip the chat: prefix, skip the
-				// rest.
-				if (m.type && m.type !== "chat") continue;
-				const plainId = id.startsWith("chat:") ? id.slice("chat:".length) : id;
-				// A catalog entry without pricing data gets no key at all
-				// (cost renders "—", never zero).
-				if (!m.cost) continue;
-				// First writer wins (an id can appear under two apis within one
-				// file with identical pricing; cross-file collisions cannot
-				// happen — keys are provider-qualified).
-				priced.set(`${provider}:${plainId}`, m.cost);
+	if (fs.existsSync(DATA_DIR)) {
+		for (const file of fs.readdirSync(DATA_DIR).filter((f) => f.endsWith(".json"))) {
+			const provider = file.slice(0, -".json".length);
+			const catalog = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), "utf-8")) as Record<
+				string,
+				Record<string, CatalogModel>
+			>;
+			for (const models of Object.values(catalog)) {
+				for (const [id, m] of Object.entries(models)) {
+					if (m.type && m.type !== "chat") continue;
+					const plainId = id.startsWith("chat:") ? id.slice("chat:".length) : id;
+					if (!m.cost) continue;
+					priced.set(`${provider}:${plainId}`, m.cost);
+				}
 			}
 		}
 	}
+
+	// Always ensure Antigravity models are present
+	for (const m of ANTIGRAVITY_MODELS) {
+		priced.set(`${m.provider}:${m.id}`, m.cost);
+	}
+
 	return priced;
 }
 

@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "./ui-stream.ts";
 
 /**
  * TOOL-CALL ID UNIQUIFICATION (owner-approved fix, 2026-10-04 — the Lacan

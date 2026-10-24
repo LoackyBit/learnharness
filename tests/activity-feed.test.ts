@@ -80,14 +80,12 @@ test("activityFeed: contextLimit is the server's live-catalog join (owner amendm
 		const unknown = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "tc_unknown" });
 		const bare = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "tc_bare" });
 		createdJobs.push(known.id, unknown.id, bare.id);
-		jobStore.updateJob(known.id, { usage: usageFor("openrouter:z-ai/glm-5.3-flash") });
+		jobStore.updateJob(known.id, { usage: usageFor("antigravity:gemini-3.8-flash-high") });
 		jobStore.updateJob(unknown.id, { usage: usageFor("nope/unknown") });
 
 		const feed = activityFeed();
 		const knownJob = feed.jobs.find((j) => j.id === known.id)!;
-		// pi 1.0.2's catalog: glm-5.3-flash contextWindow 1_048_575 (was
-		// 1_048_576 at 0.87.1 — upstream models.dev refresh).
-		assert.equal(knownJob.contextLimit, 1_048_575, "pi's catalog, joined server-side onto the feed");
+		assert.equal(knownJob.contextLimit, 1_048_576, "Antigravity catalog, joined server-side onto the feed");
 		const unknownJob = feed.jobs.find((j) => j.id === unknown.id)!;
 		assert.equal(unknownJob.contextLimit, null, "missing from the live catalog → null, never a guessed window");
 		const bareJob = feed.jobs.find((j) => j.id === bare.id)!;

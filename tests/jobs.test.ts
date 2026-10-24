@@ -27,7 +27,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { after, afterEach, describe, it } from "node:test";
-import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type AssistantMessage, type FauxResponseStep } from "@earendil-works/pi-ai";
+import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type FauxResponseStep } from "./test-fakes.ts";
+import type { AssistantMessage } from "../src/core/contracts/messages.ts";
 import {
 	accumulateJobUsage,
 	buildAbortSteer,
@@ -1502,7 +1503,7 @@ describe("abort (src/server/jobs.ts abortJob)", () => {
 			assert.equal(job.usage!.steps, 1, "usage-so-far persisted by the runner's finally");
 			// model slots wave: the stamp is the ENGINE's actual model,
 			// provider-qualified — the scripted faux engine here.
-			assert.equal(job.usage!.model, "faux:faux-1");
+			assert.equal(job.usage!.model, "antigravity:gemini-3.8-flash-high");
 			// faux estimates tokens from the prompt/response text — the
 			// pinned fact is that the ONE completed step's spend survived.
 			assert.ok(job.usage!.inputTokens! > 0, "input tokens billed");

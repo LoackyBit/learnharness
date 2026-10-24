@@ -20,7 +20,7 @@ import type { ProberToolContext } from "../src/agent/tools.ts";
 import { jobStore } from "../src/store/jobs.ts";
 import { parseAgentSettingsBody } from "../src/server/settings-body.ts";
 import { chatStore } from "../src/store/chats.ts";
-import { createFauxCore } from "@earendil-works/pi-ai";
+import { createFauxCore } from "./test-fakes.ts";
 import type { PiEngine } from "../src/agent/models.ts";
 
 /** A scripted pi engine — the agent builds need an injected engine since

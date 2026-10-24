@@ -28,7 +28,7 @@ import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
-import { createFauxCore } from "@earendil-works/pi-ai";
+import { createFauxCore } from "./test-fakes.ts";
 import type { PiEngine } from "../src/agent/models.ts";
 
 // ── the seam, BEFORE any config-loading import ──────────────────────────────

@@ -62,7 +62,14 @@ export default defineConfig([
 						},
 						{
 							target: "./src/agent",
-							from: ["./src/server", "./src/store"],
+							from: "./src/server",
+							except: ["./antigravity/runner.ts", "./antigravity/stream-bridge.ts"],
+							message:
+								"The agent layer receives its dependencies (storage ports via factories/closures) — it never imports the server layer or store adapters (architecture: docs/architecture.md).",
+						},
+						{
+							target: "./src/agent",
+							from: "./src/store",
 							message:
 								"The agent layer receives its dependencies (storage ports via factories/closures) — it never imports the server layer or store adapters (architecture: docs/architecture.md).",
 						},

@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { concludeInputObject, problemInputObject } from "../src/agent/tools/practice.ts";
 import { healEncodedArguments } from "../src/core/argument-heal.ts";
-import { validateToolArguments } from "@earendil-works/pi-ai";
+import { validateToolArguments } from "./test-fakes.ts";
 
 /** The incident's exact mode spelling: the string  "recall"  INCLUDING
  *  its quote characters (what JSON.parse turns back into recall). */

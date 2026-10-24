@@ -24,7 +24,7 @@ import {
 	fauxThinking,
 	fauxToolCall,
 	type FauxResponseStep,
-} from "@earendil-works/pi-ai";
+} from "./test-fakes.ts";
 import { createTeacherAgent } from "../src/agent/teacher-agent.ts";
 import { createTeacherTools } from "../src/agent/tools.ts";
 import { handleChatInput, handleChatRequest } from "../src/server/chat-handler.ts";
@@ -83,14 +83,14 @@ function scriptedTeacher(steps: (calls: string[][]) => FauxResponseStep[]): {
 function defaultLesson(calls: string[][]): FauxResponseStep[] {
 	return [
 		(context) => {
-			calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+			calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 			return fauxAssistantMessage(
 				[fauxThinking("Probe the basics first."), fauxToolCall("quiz", QUIZ_INPUT, { id: "call-1" })],
 				{ stopReason: "toolUse" },
 			);
 		},
 		(context) => {
-			calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+			calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 			return fauxAssistantMessage([fauxText("Right — Mercury it is.")]);
 		},
 	];
@@ -489,7 +489,7 @@ describe("teacher chat flow (scripted model)", () => {
 				);
 			},
 			async (context) => {
-				seen.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)).join("\n"));
+				seen.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)).join("\n"));
 				// HOLD the turn open past the injection: the marker's
 				// message_end already fired, so the job must be flipped
 				// done NOW (dock fix, owner 2026-09-26) — not at this
@@ -666,14 +666,14 @@ describe("teacher chat flow (scripted model)", () => {
 
 		const steps = (calls: string[][]): FauxResponseStep[] => [
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage(
 					[fauxToolCall("quiz", BAD_QUIZ_INPUT, { id: "call-bad" })],
 					{ stopReason: "toolUse" },
 				);
 			},
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage(
 					[fauxToolCall("quiz", QUIZ_INPUT, { id: "call-good" })],
 					{ stopReason: "toolUse" },
@@ -1205,14 +1205,14 @@ it("explain tool call persists as a pending part; the free-text answer reveals t
 	};
 	const { engine, calls } = scriptedTeacher((cs) => [
 		(context) => {
-			cs.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+			cs.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 			return fauxAssistantMessage(
 				[fauxThinking("Free recall this time."), fauxToolCall("explain", EXPLAIN_INPUT, { id: "call-1" })],
 				{ stopReason: "toolUse" },
 			);
 		},
 		(context) => {
-			cs.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+			cs.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 			return fauxAssistantMessage([fauxText("Right — it hugs the Sun.")]);
 		},
 	]);
@@ -1365,7 +1365,7 @@ describe("parallel question calls: the answer defers its wake while a sibling da
 	function parallelLesson(calls: string[][]): FauxResponseStep[] {
 		return [
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage(
 					[
 						fauxThinking("Batch a graded and a non-graded check."),
@@ -1376,7 +1376,7 @@ describe("parallel question calls: the answer defers its wake while a sibling da
 				);
 			},
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage([fauxText("Both answered — good.")]);
 			},
 		];
@@ -1433,7 +1433,7 @@ describe("parallel rounds: the LAST resolution decides the wake (owner ruling 20
 	function batchLesson(calls: string[][]): FauxResponseStep[] {
 		return [
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage(
 					[
 						fauxThinking("Batch again."),
@@ -1444,7 +1444,7 @@ describe("parallel rounds: the LAST resolution decides the wake (owner ruling 20
 				);
 			},
 			(context) => {
-				calls.push(context.messages.map((m) => JSON.stringify((m as { content: unknown }).content)));
+				calls.push(context.messages.map((m: any) => JSON.stringify((m as { content: unknown }).content)));
 				return fauxAssistantMessage([fauxText("Round done.")]);
 			},
 		];
