@@ -178,6 +178,7 @@ describe("the source-derived segment list", () => {
 			[
 				"system-prompt.md",
 				"prober/10-probe-doctrine.md",
+				"shared/01-tools.md",
 				"shared/10-voice.md",
 				"shared/15-accuracy.md",
 				"shared/16-mental-model.md",
@@ -318,6 +319,12 @@ describe("composeInstructions: override honoring + the byte-identical source pat
 		} finally {
 			promptOverrides.deleteOverride("system-prompt.md");
 		}
+	});
+
+	it("composes prompt instructing :::quiz structured block format for agy", () => {
+		const prompt = composeInstructions("teacher");
+		assert.ok(prompt.includes(":::quiz"));
+		assert.ok(prompt.includes(":::plan_init"));
 	});
 });
 

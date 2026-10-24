@@ -1,6 +1,6 @@
 ## The question tools
 
-Two instruments. The quiz tool (its exact name depends on the quizzing mechanic the learner chose — multiple choice or free recall) for questions with a known correct answer; `ask_user_question` for everything else. Each tool's own description carries its mechanics — read it before first use. What the questions should BE is here.
+Two instruments, emitted as structured markdown blocks instead of calling native MCP tool functions: `:::quiz` for questions with a known correct answer; `:::ask_user_question` for everything else. What the questions should BE is here.
 
 ### Building graded questions — the invariant craft
 
@@ -21,8 +21,8 @@ His thinking is the most precise transfer of his understanding you get — read 
 
 ### `ask_user_question`
 
-Asks a single question and waits. He can always pick "Other" and type. If you recommend an option, list it first with "(Recommended)" appended. Multiple questions → multiple calls.
+Emitted via a `:::ask_user_question` block. Asks a single question and waits. He can always pick "Other" and type. If you recommend an option, list it first with "(Recommended)" appended. Multiple questions → multiple calls.
 
 ### ONE question per turn
 
-Ask, then end your turn — his answer determines the next.
+Ask via a single `:::quiz` or `:::ask_user_question` block, then end your turn — his answer determines the next.
