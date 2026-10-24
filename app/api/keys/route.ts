@@ -1,6 +1,7 @@
 /**
  * GET /api/keys — the auth page's key list (auth-keys wave, 2026-09-19;
- * providers added by the provider-keys interlude same wave).
+ * providers added by the provider-keys interlude same wave; Antigravity
+ * status added for local CLI detection).
  *
  * Every curated key (present or not) plus unknown file vars surfaced as
  * generic rows — ABSENT provider keys deliberately do NOT spam status
@@ -16,10 +17,44 @@
  * file, and `shadowedByEnv` explains why a saved key is not the live one
  * (env always wins).
  */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { keyStatuses, providerKeyList } from "@/src/server";
 
 export const dynamic = "force-dynamic";
 
+export interface AntigravityStatus {
+	detected: boolean;
+	path: string;
+	status: "connected" | "not_found";
+}
+
+export function detectAntigravity(): AntigravityStatus {
+	const envPath = process.env.AGY_PATH;
+	let agyPath = envPath;
+	if (!agyPath) {
+		const fixedPath = "/Users/lorenzo/.local/bin/agy";
+		if (fs.existsSync(fixedPath)) {
+			agyPath = fixedPath;
+		} else {
+			const homePath = path.join(os.homedir(), ".local/bin/agy");
+			agyPath = fs.existsSync(homePath) ? homePath : fixedPath;
+		}
+	}
+	const detected = fs.existsSync(agyPath);
+
+	return {
+		detected,
+		path: agyPath,
+		status: detected ? "connected" : "not_found",
+	};
+}
+
 export async function GET() {
-	return Response.json({ keys: keyStatuses(), providers: providerKeyList() });
+	return Response.json({
+		keys: keyStatuses(),
+		providers: providerKeyList(),
+		antigravity: detectAntigravity(),
+	});
 }
