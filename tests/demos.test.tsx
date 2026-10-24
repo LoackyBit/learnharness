@@ -29,7 +29,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import { Value } from "typebox/value";
-import { createFauxCore, fauxAssistantMessage, fauxToolCall, type FauxResponseStep, type ToolCall } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolCall } from "../src/core/contracts/messages.ts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PATHS } from "../config.ts";
 import {
@@ -119,22 +119,73 @@ after(() => {
 	visualModelOverride.current = undefined;
 });
 
-/** A scripted pi engine (faux provider): the response queue replaces the old
+/** A scripted engine (antigravity/pi provider): the response queue replaces the old
  *  doGenerate turn counter — one queued response per model call (tool-call
  *  turn or final text), consumed in order. */
 function scriptedModel(turns: Array<{ toolCalls?: Array<{ toolCallId: string; toolName: string; input: unknown }>; text?: string }>): PiEngine {
-	const steps: FauxResponseStep[] = turns.map((step) => {
-		if (step.toolCalls) {
-			return fauxAssistantMessage(
-				step.toolCalls.map((c) => fauxToolCall(c.toolName, c.input as ToolCall["arguments"], { id: c.toolCallId })),
-				{ stopReason: "toolUse" },
-			);
-		}
-		return fauxAssistantMessage(step.text ?? "");
-	});
-	const faux = createFauxCore({ tokenSize: { min: 64, max: 64 } });
-	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	let turnIdx = 0;
+	return {
+		model: { id: "gemini-3.8-flash-high", provider: "antigravity" },
+		streamFn: (_model: any, _context?: any, _options?: any) => {
+			const step = turns[turnIdx++];
+			const content: any[] = [];
+			const stopReason = step?.toolCalls && step.toolCalls.length > 0 ? "toolUse" : "stop";
+
+			if (step?.toolCalls) {
+				for (const tc of step.toolCalls) {
+					content.push({
+						type: "toolCall",
+						id: tc.toolCallId,
+						name: tc.toolName,
+						arguments: tc.input ?? {},
+					});
+				}
+			} else if (step?.text !== undefined) {
+				content.push({
+					type: "text",
+					text: step.text,
+				});
+			}
+
+			const msg: AssistantMessage = {
+				role: "assistant",
+				content,
+				api: "antigravity",
+				provider: "antigravity",
+				model: "gemini-3.8-flash-high",
+				usage: {
+					input: 10,
+					output: 10,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 20,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: stopReason as any,
+				timestamp: Date.now(),
+			};
+
+			return {
+				result: async () => msg,
+				async *[Symbol.asyncIterator]() {
+					yield { type: "start", partial: { role: "assistant", content: [], timestamp: Date.now() } };
+					for (let i = 0; i < content.length; i++) {
+						const block = content[i];
+						if (block.type === "text") {
+							yield { type: "text_start", contentIndex: i };
+							yield { type: "text_delta", contentIndex: i, delta: block.text };
+							yield { type: "text_end", contentIndex: i };
+						} else if (block.type === "toolCall") {
+							yield { type: "toolcall_start", contentIndex: i };
+							yield { type: "toolcall_delta", contentIndex: i, delta: JSON.stringify(block.arguments) };
+							yield { type: "toolcall_end", contentIndex: i };
+						}
+					}
+					yield { type: "done", reason: stopReason, message: msg };
+				},
+			};
+		},
+	};
 }
 
 // ─── fake headless ───────────────────────────────────────────────────────────
@@ -922,7 +973,7 @@ describe("demo/visual job runners", () => {
 		createdChats.push(chat.id);
 		// BYOK turn gate (owner, 2026-09-22): the scripted chat needs a
 		// conversation model — the per-chat pin, exactly like the setup flow.
-		chatStore.saveSettings(chat.id, { model: { provider: "openrouter", id: "z-ai/glm-5.3-flash" } });
+		chatStore.saveSettings(chat.id, { model: { provider: "antigravity", id: "gemini-3.8-flash-high" } });
 
 		// A teacher that calls demo on turn 1, then continues in the SAME turn.
 		const teacher = scriptedModel([

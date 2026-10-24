@@ -1,4 +1,4 @@
-import type { PiEngine } from "../models.ts";
+import type { AntigravityEngine, PiEngine } from "../models.ts";
 import type { SearchProvider } from "../../core/search.ts";
 import {
 	accumulateJobUsage,
@@ -55,10 +55,10 @@ import { runVisualMaker } from "./visual-maker.ts";
  * Undefined in production. (The jobs spawn through the module-level KIND
  * runners, which read these at call time.)
  */
-export const researchModelOverride: { current?: PiEngine } = {};
-export const demoModelOverride: { current?: PiEngine } = {};
-export const visualModelOverride: { current?: PiEngine } = {};
-export const pdfModelOverride: { current?: PiEngine } = {};
+export const researchModelOverride: { current?: AntigravityEngine | PiEngine } = {};
+export const demoModelOverride: { current?: AntigravityEngine | PiEngine } = {};
+export const visualModelOverride: { current?: AntigravityEngine | PiEngine } = {};
+export const pdfModelOverride: { current?: AntigravityEngine | PiEngine } = {};
 
 /** The dispatch-time tool input (from src/agent/tools/jobs.ts schemas). */
 type JobToolInput = ResearchToolInput | DemoToolInput | VisualToolInput | PdfToolInput;
@@ -78,7 +78,7 @@ export interface JobRunnerDeps {
 	 *  (below) still win. BYOK (owner, 2026-09-22): the chain may end
 	 *  EMPTY → undefined; runJob then refuses the spawn honestly instead
 	 *  of guessing a model. */
-	engineFor?: (role: ModelRole) => PiEngine | undefined;
+	engineFor?: (role: ModelRole) => (AntigravityEngine | PiEngine) | undefined;
 	/** The search seam (search port wave, 2026-09-20): resolves the LIVE
 	 *  provider fresh per job — server/search.ts composition injected by
 	 *  the wiring; null = honestly unavailable (the researcher's web_search
@@ -132,11 +132,13 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 	 * then writes through the job store so the poll sees progress). */
 	const usageTotals = new Map<string, JobUsage>();
 
-	function makeLoopContext(jobId: string, engine: PiEngine): LoopContext {
+	function makeLoopContext(jobId: string, engine: AntigravityEngine | PiEngine): LoopContext {
 		const chatId = jobStore.getJob(jobId)?.chatId;
 		// Provider-qualified stamp: the engine's actual model — the only
 		// thing that ran (BYOK: no config-pin fallback stamps exist).
-		const model = `${engine.model.provider}:${engine.model.id}`;
+		const model = engine.model
+			? `${engine.model.provider || "antigravity"}:${engine.model.id || "default"}`
+			: "antigravity:default";
 		// Real-kill wiring (2026-09 abort semantics): the controller is what
 		// the abort endpoint fires (agent/subagents/aborts.ts registry); the
 		// signal rides into every model call of the loop.
@@ -168,8 +170,8 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 	 *  tests swap scripted engines without touching deps), then the injected
 	 *  settings-resolved engineFor. undefined = the BYOK chain came up
 	 *  empty (owner, 2026-09-22) — runJob refuses below, honestly. */
-	function pickEngine(kind: JobKind): PiEngine | undefined {
-		const testOverride: Record<string, { current?: PiEngine } | undefined> = {
+	function pickEngine(kind: JobKind): AntigravityEngine | PiEngine | undefined {
+		const testOverride: Record<string, { current?: AntigravityEngine | PiEngine } | undefined> = {
 			researcher: researchModelOverride,
 			demoBuilder: demoModelOverride,
 			visualMaker: visualModelOverride,
@@ -180,7 +182,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 	const KIND_RUNNERS: Record<
 		JobKind,
-		(jobId: string, engine: PiEngine, input: JobToolInput | undefined, loop: LoopContext) => Promise<void>
+		(jobId: string, engine: AntigravityEngine | PiEngine, input: JobToolInput | undefined, loop: LoopContext) => Promise<void>
 	> = {
 		research: (jobId, engine, input, loop) => runResearchJob(jobId, engine, input, loop),
 		demo: (jobId, engine, input, loop) => runDemoJob(jobId, engine, input, loop),
@@ -335,7 +337,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 	async function runResearchJob(
 		jobId: string,
-		model: PiEngine | undefined,
+		model: AntigravityEngine | PiEngine | undefined,
 		passedInput: JobToolInput | undefined,
 		loop: LoopContext,
 	): Promise<void> {
@@ -400,7 +402,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 	async function runDemoJob(
 		jobId: string,
-		model: PiEngine | undefined,
+		model: AntigravityEngine | PiEngine | undefined,
 		passedInput: JobToolInput | undefined,
 		loop: LoopContext,
 	): Promise<void> {
@@ -437,7 +439,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 	async function runVisualJob(
 		jobId: string,
-		model: PiEngine | undefined,
+		model: AntigravityEngine | PiEngine | undefined,
 		passedInput: JobToolInput | undefined,
 		loop: LoopContext,
 	): Promise<void> {
@@ -475,7 +477,7 @@ export function createJobRunner(deps: JobRunnerDeps): JobRunner {
 
 	async function runPdfJob(
 		jobId: string,
-		model: PiEngine | undefined,
+		model: AntigravityEngine | PiEngine | undefined,
 		passedInput: JobToolInput | undefined,
 		loop: LoopContext,
 	): Promise<void> {

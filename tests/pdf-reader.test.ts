@@ -7,17 +7,81 @@
 import assert from "node:assert/strict";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type FauxResponseStep } from "@earendil-works/pi-ai";
 import type { PiEngine } from "../src/agent/models.ts";
+import type { AssistantMessage } from "../src/core/contracts/messages.ts";
 import { runPdfReaderAgent } from "../src/agent/subagents/pdf-reader.ts";
 import type { HeadlessApi } from "../src/agent/subagents/headless.ts";
 
 const FIXTURE = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
 
-function fauxEngine(steps: FauxResponseStep[]): PiEngine {
-	const faux = createFauxCore({ tokenSize: { min: 64, max: 64 } });
-	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+export function fauxToolCall(name: string, args: Record<string, any> = {}, options: { id?: string } = {}) {
+	return {
+		type: "toolCall" as const,
+		id: options.id ?? `call_${Math.random().toString(36).slice(2)}`,
+		name,
+		arguments: args,
+	};
+}
+
+export function fauxText(text: string) {
+	return {
+		type: "text" as const,
+		text,
+	};
+}
+
+export function fauxAssistantMessage(content: any[], options: { stopReason?: string } = {}): AssistantMessage {
+	return {
+		role: "assistant",
+		content,
+		api: "antigravity",
+		provider: "antigravity",
+		model: "gemini-3.8-flash-high",
+		usage: {
+			input: 10,
+			output: 10,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 20,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		stopReason: (options.stopReason as any) ?? (content.some((c: any) => c.type === "toolCall") ? "toolUse" : "stop"),
+		timestamp: Date.now(),
+	};
+}
+
+type StepOrFactory = AssistantMessage | (() => AssistantMessage);
+
+function fauxEngine(steps: StepOrFactory[]): PiEngine {
+	let idx = 0;
+	return {
+		model: { id: "gemini-3.8-flash-high", provider: "antigravity" },
+		streamFn: (_model: any, _context?: any, _options?: any) => {
+			const step = steps[idx++];
+			if (!step) {
+				const emptyMsg = fauxAssistantMessage([fauxText("")]);
+				return {
+					result: async () => emptyMsg,
+					async *[Symbol.asyncIterator]() {
+						yield { type: "done", reason: "stop", message: emptyMsg };
+					},
+				};
+			}
+			const assistantMsg = typeof step === "function" ? step() : step;
+			return {
+				result: async () => assistantMsg,
+				async *[Symbol.asyncIterator]() {
+					yield { type: "start", partial: { role: "assistant", content: [], timestamp: Date.now() } };
+					for (const c of assistantMsg.content) {
+						if (c.type === "text") {
+							yield { type: "text_delta", delta: c.text };
+						}
+					}
+					yield { type: "done", reason: assistantMsg.stopReason ?? "stop", message: assistantMsg };
+				},
+			};
+		},
+	};
 }
 
 const PNG_1PX = Buffer.from([

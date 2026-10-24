@@ -1,10 +1,10 @@
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentTool } from "../tool-execute.ts";
+import type { Usage } from "../../core/contracts/messages.ts";
 import { createWebTools } from "../tools/web.ts";
 import { createPdfReadTools } from "../tools/pdf-read.ts";
 import type { SearchProvider } from "../../core/search.ts";
 import type { PiEngine } from "../models.ts";
-import { runSubagent } from "./pi-run.ts";
+import { runAntigravitySubagent } from "./antigravity-run.ts";
 
 /**
  * The researcher sub-agent (vision §2.5): a SEPARATE ToolLoopAgent instance
@@ -93,7 +93,7 @@ export interface ResearcherRunOptions {
 export async function runResearcherAgent(prompt: string, opts: ResearcherRunOptions = {}): Promise<string> {
 	const tools = Object.values(createWebTools(opts.search ?? (() => null)));
 	if (opts.pdfDir) tools.push(...Object.values(createPdfReadTools(opts.pdfDir)));
-	const { text } = await runSubagent(tools, {
+	const { text } = await runAntigravitySubagent(tools, {
 		role: "researcher",
 		prompt,
 		engine: opts.engine,

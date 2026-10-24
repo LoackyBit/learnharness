@@ -1,11 +1,10 @@
-import { randomUUID } from "node:crypto";
-import type { AssistantMessage, Message, Tool, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
-import { normalizeContext } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { piEngineFor, type PiEngine, type ThinkingLevel } from "../models.ts";
-import { providerEventObserver, type ProviderEventObserver } from "../provider-events.ts";
+import type { AgentMessage, Usage } from "../../core/contracts/messages.ts";
+import type { AgentTool } from "../tool-execute.ts";
+import type { PiEngine } from "../models.ts";
 import type { VisualResult } from "../../core/contracts.ts";
 import { getHeadless, type HeadlessApi } from "./headless.ts";
+import { runAntigravitySubagent } from "./antigravity-run.ts";
 
 /**
  * The visual-maker sub-agent (vision §2.5): authors ONE precise SVG from a
@@ -14,14 +13,7 @@ import { getHeadless, type HeadlessApi } from "./headless.ts";
  * result, and iterates until correct — a direct port of the vault POC's
  * svg-maker doctrine ("the one rule that matters: verify by looking").
  *
- * LOOP SHAPE (decided in the W6 brief): hand-rolled with generateText + a
- * messages array, because the loop must feed an IMAGE back to the model after
- * each render. write_svg / render_svg are declared WITHOUT execute — when the
- * model calls them generateText stops with the tool calls, and this loop
- * appends the tool results itself, followed by a user message containing the
- * rendered PNG as a file part ("Here is the current render"). ToolLoopAgent's
- * execute-tool plumbing can't express that image-in-the-loop shape cleanly.
- *
+ * Authored via runAntigravitySubagent with write_svg, edit_svg, render_svg tools.
  * Doctrine enforcement in code: if the model tries to finish while the
  * current SVG has never been rendered (or changed since its last render), the
  * loop renders it anyway, shows the image, and asks the model to look before
@@ -44,8 +36,7 @@ export interface VisualMakerOptions {
 	onActivity?: (line: string) => void;
 	/** Kills the run mid-model-call (2026-09 real-kill abort semantics). */
 	abortSignal?: AbortSignal;
-	/** Money channel: one call per loop iteration (streamSimple), folded
-	 * into JobRecord.usage. */
+	/** Money channel: one call per loop iteration, folded into JobRecord.usage. */
 	onUsage?: (usage: Usage) => void;
 	/** Debug: raw provider-event recording key (LH_PROVIDER_EVENTS=1). */
 	chatId?: string;
@@ -93,31 +84,130 @@ Your FINAL message: 1-2 sentences of notes for the teacher (what the figure show
 NEVER the SVG source itself. If you genuinely cannot make a correct picture of the brief, say exactly
 that in your final message and why.`;
 
-/** The wire declarations (pi-ai Tool, TypeBox parameters): this loop owns
- *  execution itself — write/edit dispatch inline below, render feeds the
- *  image-in-the-loop message — so the declarations carry no execute. */
-export function createVisualTools(): Record<string, Tool> {
+export interface VisualMakerState {
+	currentSvg: string | null;
+	renderedSvg: string | null;
+}
+
+/** The visual tools for Antigravity subagent execution. */
+export function createVisualTools(
+	state: VisualMakerState = { currentSvg: null, renderedSvg: null },
+	headless: HeadlessApi = getHeadless(),
+	onActivity?: (line: string) => void,
+): Record<string, AgentTool<any>> {
 	return {
 		write_svg: {
 			name: "write_svg",
+			label: "write_svg",
 			description: "Write the complete SVG source for the figure (overwrites any previous version).",
 			parameters: Type.Object({
 				svg: Type.String({ description: 'Complete <svg xmlns="…">…</svg> markup.' }),
 			}),
+			execute: async (_toolCallId, input) => {
+				const svg = (input as { svg?: unknown })?.svg;
+				if (typeof svg !== "string" || !svg.includes("<svg")) {
+					return {
+						content: [{ type: "text", text: "ERROR: expected a complete <svg>…</svg> document in the `svg` field." }],
+						isError: true,
+						details: {},
+					};
+				}
+				state.currentSvg = svg;
+				onActivity?.(`write_svg: ${(svg.length / 1024).toFixed(1)} KB`);
+				return {
+					content: [{ type: "text", text: `Saved (${svg.length} bytes). Call render_svg to look at it.` }],
+					details: {},
+				};
+			},
 		},
 		edit_svg: {
 			name: "edit_svg",
+			label: "edit_svg",
 			description:
 				"Replace one exact spot in the current SVG: old_text must appear EXACTLY ONCE and is replaced by new_text. Call write_svg first. For larger changes, write_svg the whole document.",
 			parameters: Type.Object({
 				old_text: Type.String({ description: "The exact text to replace — must match exactly once in the current SVG." }),
 				new_text: Type.String({ description: "The replacement text." }),
 			}),
+			execute: async (_toolCallId, input) => {
+				const edit = (input ?? {}) as { old_text?: unknown; new_text?: unknown };
+				if (!state.currentSvg) {
+					return {
+						content: [{ type: "text", text: "ERROR: nothing to edit — call write_svg first." }],
+						isError: true,
+						details: {},
+					};
+				}
+				if (typeof edit.old_text !== "string" || typeof edit.new_text !== "string" || !edit.old_text) {
+					return {
+						content: [{ type: "text", text: "ERROR: expected old_text (non-empty) and new_text strings." }],
+						isError: true,
+						details: {},
+					};
+				}
+				const occurrences = state.currentSvg.split(edit.old_text).length - 1;
+				if (occurrences === 0) {
+					return {
+						content: [{
+							type: "text",
+							text: `ERROR: old_text not found. Closest line for reference:\n${snippetAround(state.currentSvg, edit.old_text)}`,
+						}],
+						isError: true,
+						details: {},
+					};
+				}
+				if (occurrences > 1) {
+					return {
+						content: [{
+							type: "text",
+							text: `ERROR: old_text appears ${occurrences} times — it must match EXACTLY ONCE. Include more surrounding context to make it unique.`,
+						}],
+						isError: true,
+						details: {},
+					};
+				}
+				state.currentSvg = state.currentSvg.replace(edit.old_text, edit.new_text);
+				onActivity?.("edit_svg: applied");
+				return {
+					content: [{ type: "text", text: "OK — replaced 1 occurrence. Call render_svg to look at the edited SVG." }],
+					details: {},
+				};
+			},
 		},
 		render_svg: {
 			name: "render_svg",
+			label: "render_svg",
 			description: "Render the current SVG to a PNG and show it to you for inspection. No arguments.",
 			parameters: Type.Object({}),
+			execute: async () => {
+				if (!state.currentSvg) {
+					return {
+						content: [{ type: "text", text: "ERROR: nothing to render — call write_svg first." }],
+						isError: true,
+						details: {},
+					};
+				}
+				try {
+					const png = await headless.renderSvg(state.currentSvg);
+					state.renderedSvg = state.currentSvg;
+					onActivity?.("render_svg: inspecting render");
+					return {
+						content: [
+							{ type: "text", text: "Rendered — the PNG follows in the next message. Look at it." },
+							{ type: "image", data: png.toString("base64"), mimeType: "image/png" },
+						],
+						details: {},
+					};
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					onActivity?.("render_svg: render error");
+					return {
+						content: [{ type: "text", text: `RENDER ERROR (the SVG may be malformed): ${msg}. Fix it with write_svg and render again.` }],
+						isError: true,
+						details: {},
+					};
+				}
+			},
 		},
 	};
 }
@@ -137,13 +227,9 @@ export async function runVisualMaker(input: VisualMakerInput, opts: VisualMakerO
 		return { svg: "", notes: `FAILED: ${reason}` };
 	}
 
-	const tools = createVisualTools();
-	const toolDeclarations = Object.values(tools);
-	const engine = opts.engine ?? piEngineFor("visualMaker");
-	// BYOK (owner, 2026-09-22): the level rides the injected engine — no
-	// factory pin to consult (engine.level is the resolved/clamped value).
-	const reasoning = engine.level;
-	const sessionId = randomUUID();
+	const state: VisualMakerState = { currentSvg: null, renderedSvg: null };
+	const tools = Object.values(createVisualTools(state, headless, opts.onActivity));
+
 	const prompt = [
 		"Brief for ONE precise figure (from the teacher, verbatim — it is everything you know):",
 		brief,
@@ -151,201 +237,64 @@ export async function runVisualMaker(input: VisualMakerInput, opts: VisualMakerO
 		"Author the SVG, render it, look at it, iterate until correct, then finish with your notes.",
 	].join("\n");
 
-	let messages: Message[] = [{ role: "user", content: prompt, timestamp: Date.now() }];
-	let currentSvg: string | null = null;
-	/** The svg shown in the most recent render (null = never rendered). */
-	let renderedSvg: string | null = null;
+	let messages: AgentMessage[] = [];
 	let finalText = "";
+	let turnsLeft = maxIterations;
 
 	try {
-		for (let iteration = 0; iteration < maxIterations; iteration++) {
-			// One model call per iteration (streamSimple, no agent loop — this
-			// loop owns tool execution and the image-in-the-loop injection).
-			const result = await streamOnce(
-				engine,
-				INSTRUCTIONS,
-				messages,
-				toolDeclarations,
-				sessionId,
-				reasoning,
-				opts.abortSignal,
-				opts.chatId ? providerEventObserver(opts.chatId, "job:visualMaker") : undefined,
-			);
-			// Money channel: each iteration is one model call.
-			opts.onUsage?.(result.usage);
-			messages = [...messages, result];
+		while (turnsLeft > 0) {
+			const result = await runAntigravitySubagent(tools, {
+				role: "visualMaker",
+				engine: opts.engine,
+				systemPrompt: INSTRUCTIONS,
+				prompt: messages.length === 0 ? prompt : undefined,
+				messages: messages.length > 0 ? messages : undefined,
+				maxTurns: turnsLeft,
+				abortSignal: opts.abortSignal,
+				onUsage: opts.onUsage,
+				chatId: opts.chatId,
+			});
 
-			const toolCalls = result.content.filter((c): c is Extract<typeof c, { type: "toolCall" }> => c.type === "toolCall");
-			if (toolCalls.length === 0) {
-				finalText = result.content
-					.filter((c): c is { type: "text"; text: string } => c.type === "text")
-					.map((c) => c.text)
-					.join("")
-					.trim();
-				// Doctrine gate: never deliver an unlooked SVG. If the current SVG
-				// changed since its last render (or was never rendered), show it now
-				// and make the model look before accepting the finish.
-				if (currentSvg && renderedSvg !== currentSvg) {
-					let png: Buffer;
-					try {
-						png = await headless.renderSvg(currentSvg);
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
-						return { svg: "", notes: `FAILED: rendering the final SVG failed — ${msg}` };
-					}
-					opts.onActivity?.("render_svg: inspecting final render");
-					renderedSvg = currentSvg;
-					messages = [
-						...messages,
-						{
-							role: "user",
-							content: [
-								{ type: "text", text: UNLOOKED_FINISH_MESSAGE },
-								{ type: "image", data: png.toString("base64"), mimeType: "image/png" },
-							],
-							timestamp: Date.now(),
-						},
-					];
-					continue;
+			messages = [...messages, ...result.newMessages];
+			finalText = result.text.trim();
+			const assistantTurns = result.newMessages.filter((m) => (m as { role?: string }).role === "assistant").length;
+			turnsLeft -= Math.max(1, assistantTurns);
+
+			// Doctrine gate: never deliver an unlooked SVG. If the current SVG
+			// changed since its last render (or was never rendered), show it now
+			// and make the model look before accepting the finish.
+			if (state.currentSvg && state.renderedSvg !== state.currentSvg && turnsLeft > 0) {
+				let png: Buffer;
+				try {
+					png = await headless.renderSvg(state.currentSvg);
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					return { svg: "", notes: `FAILED: rendering the final SVG failed — ${msg}` };
 				}
-				return finish(currentSvg, finalText);
+				opts.onActivity?.("render_svg: inspecting final render");
+				state.renderedSvg = state.currentSvg;
+				messages.push({
+					role: "user",
+					content: [
+						{ type: "text", text: UNLOOKED_FINISH_MESSAGE },
+						{ type: "image", data: png.toString("base64"), mimeType: "image/png" },
+					],
+					timestamp: Date.now(),
+				});
+				continue;
 			}
 
-			const toolResults: ToolResultMessage[] = [];
-			let renderPng: Buffer | null = null; // appended as the image message AFTER the tool results
-			for (const call of toolCalls) {
-				if (call.name === "write_svg") {
-					const svg = (call.arguments as { svg?: unknown }).svg;
-					if (typeof svg !== "string" || !svg.includes("<svg")) {
-						toolResults.push(toolText(call.id, call.name, "ERROR: expected a complete <svg>…</svg> document in the `svg` field."));
-						continue;
-					}
-					currentSvg = svg;
-					opts.onActivity?.(`write_svg: ${(svg.length / 1024).toFixed(1)} KB`);
-					toolResults.push(toolText(call.id, call.name, `Saved (${svg.length} bytes). Call render_svg to look at it.`));
-				} else if (call.name === "edit_svg") {
-					const edit = call.arguments as { old_text?: unknown; new_text?: unknown };
-					if (!currentSvg) {
-						toolResults.push(toolText(call.id, call.name, "ERROR: nothing to edit — call write_svg first."));
-						continue;
-					}
-					if (typeof edit.old_text !== "string" || typeof edit.new_text !== "string" || !edit.old_text) {
-						toolResults.push(toolText(call.id, call.name, "ERROR: expected old_text (non-empty) and new_text strings."));
-						continue;
-					}
-					const occurrences = currentSvg.split(edit.old_text).length - 1;
-					if (occurrences === 0) {
-						toolResults.push(
-							toolText(
-								call.id,
-								call.name,
-								`ERROR: old_text not found. Closest line for reference:\n${snippetAround(currentSvg, edit.old_text)}`,
-							),
-						);
-						continue;
-					}
-					if (occurrences > 1) {
-						toolResults.push(
-							toolText(call.id, call.name, `ERROR: old_text appears ${occurrences} times — it must match EXACTLY ONCE. Include more surrounding context to make it unique.`),
-						);
-						continue;
-					}
-					currentSvg = currentSvg.replace(edit.old_text, edit.new_text);
-					opts.onActivity?.("edit_svg: applied");
-					toolResults.push(toolText(call.id, call.name, "OK — replaced 1 occurrence. Call render_svg to look at the edited SVG."));
-				} else if (call.name === "render_svg") {
-					if (!currentSvg) {
-						toolResults.push(toolText(call.id, call.name, "ERROR: nothing to render — call write_svg first."));
-						continue;
-					}
-					try {
-						const png = await headless.renderSvg(currentSvg);
-						renderPng = png;
-						renderedSvg = currentSvg;
-						opts.onActivity?.("render_svg: inspecting render");
-						toolResults.push(toolText(call.id, call.name, "Rendered — the PNG follows in the next message. Look at it."));
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
-						opts.onActivity?.("render_svg: render error");
-						toolResults.push(toolText(call.id, call.name, `RENDER ERROR (the SVG may be malformed): ${msg}. Fix it with write_svg and render again.`));
-					}
-				} else {
-					toolResults.push(toolText(call.id, call.name, `ERROR: unknown tool "${call.name}". Use write_svg, edit_svg, or render_svg.`));
-				}
-			}
-			// Message order: assistant tool-calls → tool results → render image.
-			messages = [...messages, ...toolResults];
-			if (renderPng) {
-				messages = [
-					...messages,
-					{
-						role: "user",
-						content: [
-							{ type: "text", text: LOOK_MESSAGE },
-							{ type: "image", data: renderPng.toString("base64"), mimeType: "image/png" },
-						],
-						timestamp: Date.now(),
-					},
-				];
-			}
+			break;
 		}
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return { svg: "", notes: `FAILED: the maker crashed — ${msg}` };
 	}
 
-	// Iteration limit: deliver the last written SVG only if it was looked at.
-	if (currentSvg && renderedSvg === currentSvg) {
-		return { svg: currentSvg, notes: finalText || "Iteration limit reached — delivering the last verified SVG." };
+	if (state.currentSvg && state.renderedSvg === state.currentSvg) {
+		return { svg: state.currentSvg, notes: finalText || "Iteration limit reached — delivering the last verified SVG." };
 	}
-	return { svg: "", notes: `FAILED: iteration limit (${maxIterations}) reached without a verified SVG.` };
-}
-
-function toolText(toolCallId: string, toolName: string, value: string): ToolResultMessage {
-	return {
-		role: "toolResult",
-		toolCallId,
-		toolName,
-		content: [{ type: "text", text: value }],
-		isError: value.startsWith("ERROR:") || value.startsWith("RENDER ERROR"),
-		timestamp: Date.now(),
-	};
-}
-
-/** One raw model call (no agent loop): drain the event stream to the final
- *  AssistantMessage; provider errors and aborts throw so the loop's catch
- *  path keeps its old generateText semantics. */
-async function streamOnce(
-	engine: PiEngine,
-	systemPrompt: string,
-	messages: Message[],
-	tools: Tool[],
-	sessionId: string,
-	reasoning: ThinkingLevel | undefined,
-	abortSignal?: AbortSignal,
-	onProviderStreamEvent?: ProviderEventObserver,
-): Promise<AssistantMessage> {
-	// 0.87.1: provider-facing contexts are TranscriptContexts — the prompt
-	// and tool declarations fold into a leading system message.
-	// normalizeContext is the library's only Context→TranscriptContext entry.
-	const stream = engine.streamFn(engine.model, normalizeContext({ systemPrompt, messages, tools }), {
-		sessionId,
-		reasoning: reasoning && reasoning !== "off" ? reasoning : undefined,
-		signal: abortSignal,
-		onProviderStreamEvent: onProviderStreamEvent as never,
-	} as never);
-	for await (const event of stream) {
-		if (event.type === "done") return event.message;
-		if (event.type === "error") {
-			if (event.reason === "aborted") {
-				const err = new Error("aborted");
-				err.name = "AbortError";
-				throw err;
-			}
-			throw new Error(event.error.errorMessage ?? "the model call failed");
-		}
-	}
-	throw new Error("the model stream ended without a result");
+	return finish(state.currentSvg, finalText);
 }
 
 /** A 3-line numbered context window around the closest fuzzy match for a

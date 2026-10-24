@@ -1,9 +1,9 @@
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentTool } from "../tool-execute.ts";
+import type { Usage } from "../../core/contracts/messages.ts";
 import { serverExecute } from "../tool-execute.ts";
 import type { PiEngine } from "../models.ts";
-import { runSubagent } from "./pi-run.ts";
+import { runAntigravitySubagent } from "./antigravity-run.ts";
 import type { DemoResult } from "../../core/contracts.ts";
 import { getHeadless, type DemoRunResult, type HeadlessApi } from "./headless.ts";
 import { healToolRecord } from "../tools/heal.ts";
@@ -204,7 +204,7 @@ export async function runDemoBuilder(input: DemoBuilderInput, opts: DemoBuilderO
 
 	let finalText = "";
 	try {
-		const result = await runSubagent(Object.values(createDemoBuilderTools(state, headless, opts.onActivity)), {
+		const result = await runAntigravitySubagent(Object.values(createDemoBuilderTools(state, headless, opts.onActivity)), {
 			role: "demoBuilder",
 			engine: opts.engine,
 			systemPrompt: INSTRUCTIONS,
