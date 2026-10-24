@@ -15,16 +15,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
-import {
-	createFauxCore,
-	fauxAssistantMessage,
-	fauxText,
-	fauxToolCall,
-	type AssistantMessage,
-	type FauxResponseFactory,
-	type FauxResponseStep,
-	type TranscriptContext,
-} from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolResultMessage } from "../src/core/contracts/messages.ts";
 import type { PiEngine } from "../src/agent/models.ts";
 import { createPracticeAgent } from "../src/agent/teacher-agent.ts";
 import { handleChatRequest } from "../src/server/chat-handler.ts";
@@ -34,7 +25,6 @@ import { activeProblemOf, needsContinuation } from "../src/core/index.ts";
 import { PATHS } from "../config.ts";
 import { CONCLUDE_ACK_TEXT } from "../src/core/contracts/chat.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 // The BYOK key-presence gate reads env-first (chat-flow.test.ts's idiom).
 process.env.OPENROUTER_API_KEY ??= "test-key-presence-gate";
@@ -57,6 +47,47 @@ const CONCLUDE = {
 	retest: false,
 } as const;
 
+interface TranscriptContext {
+	messages: Array<{ content?: unknown }>;
+}
+
+type FauxResponseStep =
+	| AssistantMessage
+	| ((context: TranscriptContext) => AssistantMessage | Promise<AssistantMessage>);
+
+function fauxText(text: string) {
+	return { type: "text" as const, text };
+}
+
+function fauxToolCall(name: string, args: Record<string, any>, opts?: { id?: string }) {
+	return {
+		type: "toolCall" as const,
+		id: opts?.id ?? "call-1",
+		name,
+		arguments: args,
+	};
+}
+
+function fauxAssistantMessage(content: any[], opts?: { stopReason?: string }): AssistantMessage {
+	return {
+		role: "assistant",
+		content,
+		stopReason: (opts?.stopReason as any) ?? "stop",
+		api: "antigravity",
+		provider: "antigravity",
+		model: "gemini-3.8-flash-high",
+		usage: {
+			input: 10,
+			output: 10,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 20,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
+		timestamp: Date.now(),
+	};
+}
+
 const createdChats: string[] = [];
 after(() => {
 	for (const id of createdChats) {
@@ -70,7 +101,7 @@ after(() => {
 
 function createPracticeChat(title: string) {
 	const chat = chatStore.createChat(title, "practice");
-	chatStore.saveSettings(chat.id, { model: { provider: "openrouter", id: "z-ai/glm-5.3-flash" } });
+	chatStore.saveSettings(chat.id, { model: { provider: "antigravity", id: "gemini-3.8-flash-high" } });
 	createdChats.push(chat.id);
 	return chat;
 }
@@ -81,13 +112,6 @@ function post(chatId: string, input: unknown): Request {
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({ chatId, input }),
 	});
-}
-
-async function drain(res: Response): Promise<string> {
-	if (res.status !== 200) {
-		assert.fail(`expected 200, got ${res.status}: ${await res.text()}`);
-	}
-	return res.text();
 }
 
 /** CONNECTION DIET B (owner, 2026-10-10): POST acks and closes; the turn's
@@ -111,22 +135,39 @@ function practiceFactory(chatId: string, engine: PiEngine): Parameters<typeof ha
 	return (opts) => createPracticeAgent({ chatId, chatStore }, { engine, messages: opts.messages });
 }
 
-/** Each step records the prompt it received — the transcript the model
- *  saw (the chat-flow capture idiom). */
+/** Each step records the prompt it received — the transcript the model saw. */
 function scripted(steps: FauxResponseStep[]): { engine: PiEngine; calls: string[] } {
 	const calls: string[] = [];
-	const faux = createFauxCore({});
-	const wrap = (step: FauxResponseStep) =>
-		async (context: TranscriptContext): Promise<AssistantMessage> => {
-			calls.push(
-				context.messages.map((m) => JSON.stringify((m as { content?: unknown }).content)).join("\n"),
-			);
-			return typeof step === "function"
-				? await (step as FauxResponseFactory)(context, undefined, undefined as never, undefined as never)
-				: step;
+	let index = 0;
+	const streamFn = async (_model: unknown, context: TranscriptContext) => {
+		calls.push(context.messages.map((m) => JSON.stringify((m as { content?: unknown }).content)).join("\n"));
+		const step = steps[index++];
+		if (!step) throw new Error(`scripted engine: no step configured for call ${index}`);
+		const res = typeof step === "function" ? await step(context) : step;
+		return {
+			...res,
+			result: async () => res,
 		};
-	faux.setResponses(steps.map(wrap));
-	return { engine: { model: faux.getModel(), streamFn: faux.streamSimple }, calls };
+	};
+	return {
+		engine: {
+			model: {
+				id: "gemini-3.8-flash-high",
+				name: "Gemini 3.8 Flash High",
+				provider: "antigravity",
+				reasoning: true,
+				input: ["text", "image"],
+				supportedLevels: ["low", "medium", "high", "xhigh", "max"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: 1_048_576,
+				maxTokens: 65_536,
+				api: "antigravity",
+			},
+			level: "high",
+			streamFn: streamFn as any,
+		},
+		calls,
+	};
 }
 
 const lastSaw = (calls: string[], needle: string) => calls[calls.length - 1]!.includes(needle);
@@ -151,6 +192,8 @@ describe("practice flow (scripted model)", () => {
 		assert.equal(ack.role, "toolResult");
 		assert.equal(ack.toolName, "problem");
 		assert.equal(ack.isError, false);
+		assert.ok(Array.isArray(ack.content), "pose ack has native content array");
+		assert.ok((ack.content[0] as { text: string }).text.includes("Problem posed"), "pose ack carries problem text");
 		assert.equal(needsContinuation(afterPose), false);
 		assert.equal(activeProblemOf(afterPose)?.toolCallId, "call-p1");
 
@@ -164,9 +207,12 @@ describe("practice flow (scripted model)", () => {
 			(m) => (m as ToolResultMessage).role === "toolResult" && (m as ToolResultMessage).toolName === "conclude",
 		) as LhMessage & ToolResultMessage;
 		assert.ok(concludeAck, "the conclude ack persisted");
+		assert.equal(concludeAck.isError, false);
+		assert.ok(Array.isArray(concludeAck.content), "conclude ack has native content array");
 		// Owner round 16: the ack carries the turn-ends law (no more tools,
 		// the learner's go-ahead paces the next problem).
 		assert.ok((concludeAck.content[0] as { text: string }).text.includes("END YOUR TURN"));
+		assert.ok((concludeAck.content[0] as { text: string }).text.includes(CONCLUDE_ACK_TEXT));
 		// The turn continued past conclude to the reveal text.
 		assert.ok(afterConclude.some((m) => (m as { role?: string }).role === "assistant" && JSON.stringify((m as { content?: unknown }).content).includes("Clean proof.")));
 		assert.equal(activeProblemOf(afterConclude), null);
@@ -216,6 +262,8 @@ describe("practice flow (scripted model)", () => {
 			(m) => (m as ToolResultMessage).role === "toolResult" && (m as ToolResultMessage).toolName === "conclude",
 		) as (LhMessage & ToolResultMessage) | undefined;
 		assert.ok(synth, "the synthesized conclude result persisted");
+		assert.equal(synth.isError, false);
+		assert.ok(Array.isArray(synth.content), "synthesized conclude has native content array");
 		assert.ok(
 			(synth.content[0] as { text: string }).text.includes(CONCLUDE_ACK_TEXT),
 			"the pair carries the shared conclude ack text",

@@ -1,12 +1,10 @@
 /**
  * provider-events — the raw-wire recorder (owner, 2026-10-04).
  *
- * pi-ai 1.0's onProviderStreamEvent observer fires for each PARSED
- * provider stream event BEFORE pi normalizes it — the exact layer where
- * our provider-quirk incident class lives and where nothing else in the
- * app can see: GLM-flash truncating tool-call arguments mid-JSON
- * (2026-09-25), DeepSeek resetting tool-call ids every response
- * (2026-10-04, the Lacan session). This module turns that observer into
+ * Captures raw provider stream events BEFORE normalization — the exact layer where
+ * provider-quirk incidents live and where nothing else in the app can see:
+ * GLM-flash truncating tool-call arguments mid-JSON, DeepSeek resetting
+ * tool-call ids every response. This module turns that observer into
  * an inspectable artifact.
  *
  * Gating (owner choice, 2026-10-04): env var only —
@@ -38,13 +36,21 @@ export const providerEventsCap = { current: CAP_BYTES };
 /** Test seam (the toolTimeoutMs idiom): redirect the output directory. */
 export const providerEventsDir = { current: path.join(PATHS.debug, "provider-events") };
 
-/** The model shape the observer receives (structural — pi passes Model). */
+/** The model shape the observer receives. */
 export interface ProviderEventModel {
 	provider?: string;
 	id?: string;
+	name?: string;
 }
 
-export type ProviderEventObserver = (data: unknown, model: ProviderEventModel) => void;
+/** Native provider stream event payload shape. */
+export type NativeProviderStreamEvent =
+	| { type: string; [key: string]: unknown }
+	| string
+	| Record<string, unknown>
+	| unknown;
+
+export type ProviderEventObserver = (data: NativeProviderStreamEvent, model?: ProviderEventModel) => void;
 
 /** Per-file accounting so the cap marker writes exactly once. */
 const files = new Map<string, { bytes: number; capped: boolean }>();
