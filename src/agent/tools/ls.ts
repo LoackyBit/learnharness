@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 import { capOutput, formatSize, MAX_OUTPUT_BYTES, resolveSourcePath } from "./fs-shared.ts";
 
 /**
@@ -24,7 +23,7 @@ const lsInput = Type.Object({
 	),
 });
 
-export const lsTool: AgentTool<typeof lsInput> = {
+export const lsTool: LhTool<typeof lsInput> = {
 	name: "ls",
 	label: "ls",
 	description: `List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to ${DEFAULT_LIMIT} entries or ${formatSize(MAX_OUTPUT_BYTES)} (whichever is hit first).`,

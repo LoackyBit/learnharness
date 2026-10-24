@@ -1,8 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute, type ImageFileResult } from "../tool-execute.ts";
+import { serverExecute, type ImageFileResult, type LhTool } from "../tool-execute.ts";
 import { resolveSourcePath } from "./fs-shared.ts";
 
 /**
@@ -95,7 +94,7 @@ function readTextSlice(text: string, offset: number | undefined, limit: number |
  * fragment (prompts/shared/). Relative paths resolve against the
  * learner's home (fs-shared.ts), the harness's anchor.
  */
-export const readTool: AgentTool<typeof readInput> = {
+export const readTool: LhTool<typeof readInput> = {
 	name: "read",
 	label: "read",
 	description: `Read the contents of a file. Supports text files and images (jpg, png, gif, webp, bmp). Images are sent as attachments. For text files, output is truncated to 2000 lines or 50.0KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,

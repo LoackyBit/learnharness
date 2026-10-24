@@ -1,5 +1,4 @@
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 import { probeDoneInputSchema, PROBE_DONE_ACK_TEXT } from "../../core/contracts.ts";
 import { danglingQuestionOf, hasProbeDone, type LhMessage } from "../../core/native-messages.ts";
 import type { ChatStore } from "../../core/ports.ts";
@@ -45,7 +44,7 @@ function probeConcluded(messages: readonly LhMessage[]): boolean {
  * The first probe_done in the transcript is also the construction seam:
  * from that message on, every request builds the TEACHER agent.
  */
-export function probeDoneTool(ctx: ProbeDoneContext): Record<string, AgentTool<any>> {
+export function probeDoneTool(ctx: ProbeDoneContext): Record<string, LhTool<any>> {
 	return {
 		probe_done: {
 			name: "probe_done",

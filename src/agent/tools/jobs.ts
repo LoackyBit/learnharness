@@ -1,6 +1,5 @@
 import { Type, type Static } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 import type { JobRecord } from "../../core/contracts.ts";
 import type { JobStore } from "../../core/ports.ts";
 
@@ -132,7 +131,7 @@ const PDF_DESCRIPTION =
  * server can't dispatch doomed research jobs. Jobs ALREADY in flight when
  * a key disappears still run to their honest failure (runner backstop).
  */
-export function jobTools(ctx: JobToolContext): Record<string, AgentTool<any>> {
+export function jobTools(ctx: JobToolContext): Record<string, LhTool<any>> {
 	const searchOn = ctx.searchAvailable?.() ?? true;
 	return {
 		...(searchOn && {

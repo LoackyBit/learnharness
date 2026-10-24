@@ -1,6 +1,5 @@
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 import { getGraph, graphSessionIndex, graphSessionPropositions } from "../../core/graph.ts";
 import type { ChatStore, GraphStore } from "../../core/ports.ts";
 
@@ -38,7 +37,7 @@ const listPropositionsInput = Type.Object({
 	}),
 });
 
-export function proberGraphTools(ctx: GraphToolContext): Record<string, AgentTool<any>> {
+export function proberGraphTools(ctx: GraphToolContext): Record<string, LhTool<any>> {
 	const deps = { chatStore: ctx.chatStore, graphStore: ctx.graphStore };
 	return {
 		list_sessions: {
@@ -109,7 +108,7 @@ function globMatch(pattern: string, text: string): boolean {
 	return re.test(text);
 }
 
-export function auditorGraphTools(ctx: GraphToolContext): Record<string, AgentTool<any>> {
+export function auditorGraphTools(ctx: GraphToolContext): Record<string, LhTool<any>> {
 	const deps = { chatStore: ctx.chatStore, graphStore: ctx.graphStore };
 	const findInput = Type.Object({
 		query: Type.String({

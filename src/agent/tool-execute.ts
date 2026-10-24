@@ -1,6 +1,45 @@
-import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 import { CONCLUDE_ACK_TEXT } from "../core/contracts/chat.ts";
+import type { ImageContent, TextContent, Usage } from "../core/contracts/messages.ts";
+
+/**
+ * Result returned by an LhTool execute call.
+ */
+export interface LhToolResult<TDetails = any> {
+	content: (TextContent | ImageContent)[];
+	details: TDetails;
+	structuredContent?: any;
+	usage?: any;
+	isError?: boolean;
+	terminate?: boolean;
+}
+
+export type LhToolUpdateCallback<TDetails = any> = (partialResult: LhToolResult<TDetails>) => void;
+
+/**
+ * Native tool definition for LearnHarness agents.
+ */
+export interface LhTool<TSchema = any, TDetails = any> {
+	name: string;
+	description: string;
+	parameters: TSchema;
+	label: string;
+	prepareArguments?: (args: unknown) => any;
+	outputSchema?: any;
+	execute: (
+		toolCallId: string,
+		params: any,
+		signal?: AbortSignal,
+		onUpdate?: LhToolUpdateCallback<TDetails>,
+	) => Promise<LhToolResult<TDetails>>;
+	replay?: "never" | "safe";
+	executionMode?: "sequential" | "parallel";
+}
+
+/** Backward-compatible type alias for LhTool. */
+export type AgentTool<TSchema = any, TDetails = any> = LhTool<TSchema, TDetails>;
+/** Backward-compatible type alias for LhToolResult. */
+export type AgentToolResult<TDetails = any> = LhToolResult<TDetails>;
 
 /**
  * tool-execute — the execution machinery every server-side lh tool shares,
@@ -52,7 +91,7 @@ export const toolTimeoutMs = { current: TOOL_TIMEOUT_MS };
  *  partial results within a tick or two (the fs tools check per file). */
 const TOOL_ABORT_GRACE_MS = 250;
 
-function runWithAbortGuard<T>(
+export function runWithAbortGuard<T>(
 	toolName: string,
 	run: (signal: AbortSignal) => T | Promise<T>,
 	parent: AbortSignal | undefined,
@@ -117,7 +156,7 @@ function runWithAbortGuard<T>(
 export function invalidInputResult(
 	toolName: string,
 	problems: string[],
-): AgentToolResult<{ tool: string; problems: string[] }> {
+): LhToolResult<{ tool: string; problems: string[] }> {
 	return {
 		content: [
 			{
@@ -159,7 +198,7 @@ function isImageResult(v: unknown): v is ImageFileResult {
  * output reads it, ui-stream), and image results become native content
  * parts with details ?? null.
  */
-export function toToolResult(result: unknown): AgentToolResult<unknown> {
+export function toToolResult(result: unknown): LhToolResult<unknown> {
 	if (isImageResult(result)) {
 		return {
 			content: [
@@ -197,7 +236,7 @@ export function serverExecute<P extends TSchema>(
 	toolName: string,
 	schema: P,
 	run: (input: Static<P>, ctx: ToolExecuteContext) => unknown,
-): AgentTool<any>["execute"] {
+): LhTool<any>["execute"] {
 	// The returned execute is deliberately typed loose (params: unknown) so
 	// it satisfies every AgentTool slot — heterogeneous registries type
 	// AgentTool<any>, whose Static is unknown, and strictFunctionTypes
@@ -219,7 +258,7 @@ export function serverExecute<P extends TSchema>(
  * batch (question + other calls in one message) that terminate-only
  * semantics would let run on (owner Option A, 2026-09-25).
  */
-export function questionResult(): AgentToolResult<null> {
+export function questionResult(): LhToolResult<null> {
 	return {
 		content: [
 			{
@@ -237,7 +276,7 @@ export function questionResult(): AgentToolResult<null> {
  *  only QUESTION_TOOLS placeholders), because the learner's submissions
  *  arrive as MESSAGES, never as this call's result. terminate: true ends
  *  the turn at the pose; the commitment rides the call's arguments. */
-export function problemResult(): AgentToolResult<null> {
+export function problemResult(): LhToolResult<null> {
 	return {
 		content: [
 			{
@@ -253,7 +292,7 @@ export function problemResult(): AgentToolResult<null> {
 /** The conclude ack: NOT terminate — the turn continues so the same reply
  *  can reveal + pose the next problem. Text single-sourced in contracts
  *  (CONCLUDE_ACK_TEXT — shared with the dismissal-synthesized pair). */
-export function concludeResult(): AgentToolResult<null> {
+export function concludeResult(): LhToolResult<null> {
 	return {
 		content: [{ type: "text", text: CONCLUDE_ACK_TEXT }],
 		details: null,

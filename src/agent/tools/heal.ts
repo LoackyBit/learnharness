@@ -22,7 +22,7 @@
  * wrapper is a harmless second pass.
  */
 
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { LhTool } from "../tool-execute.ts";
 import { healEncodedArguments } from "../../core/argument-heal.ts";
 
 export { healEncodedArguments };
@@ -31,7 +31,7 @@ export { healEncodedArguments };
  *  (options-unwrap, target normalization, …) runs first, then the heal
  *  against the tool's declared schema. Spread-safe (these are plain
  *  object literals) and idempotent. */
-export function withArgumentHeal(tool: AgentTool<any>): AgentTool<any> {
+export function withArgumentHeal(tool: LhTool<any>): LhTool<any> {
 	const inner = tool.prepareArguments;
 	return {
 		...tool,
@@ -43,6 +43,6 @@ export function withArgumentHeal(tool: AgentTool<any>): AgentTool<any> {
  *  wrap every tool in a tool record. Applied at the registry-assembly
  *  points — createProberTools, createTeacherTools, practiceTools,
  *  bareQuestionTools, the subagent sets — so no tool can ship unwrapped. */
-export function healToolRecord(tools: Record<string, AgentTool<any>>): Record<string, AgentTool<any>> {
+export function healToolRecord(tools: Record<string, LhTool<any>>): Record<string, LhTool<any>> {
 	return Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, withArgumentHeal(tool)]));
 }

@@ -1,6 +1,5 @@
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 import type { PlanToolResult, PlanTree } from "../../core/contracts.ts";
 import type { ChatStore } from "../../core/ports.ts";
 import { createTree, PlanTreeError } from "../../core/plan-tree.ts";
@@ -59,7 +58,7 @@ const planInitInput = Type.Object({
 	}),
 });
 
-export function planTools(ctx: PlanToolContext): Record<string, AgentTool<any>> {
+export function planTools(ctx: PlanToolContext): Record<string, LhTool<any>> {
 	return {
 		plan_init: {
 			name: "plan_init",

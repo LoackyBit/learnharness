@@ -15,7 +15,6 @@
  */
 
 import { Type, type Static } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { resolveTargetId } from "../../core/chains.ts";
 import { readTool } from "./read.ts";
 import { lsTool } from "./ls.ts";
@@ -25,7 +24,12 @@ import { jobTools, type JobToolContext } from "./jobs.ts";
 import { proberGraphTools, type GraphToolContext } from "./graph.ts";
 import { activeProblemOf } from "../../core/native-messages.ts";
 import type { LhMessage } from "../../core/native-messages.ts";
-import { concludeResult, invalidInputResult, problemResult } from "../tool-execute.ts";
+import {
+	concludeResult,
+	invalidInputResult,
+	problemResult,
+	type LhTool,
+} from "../tool-execute.ts";
 import { healEncodedArguments, healToolRecord } from "./heal.ts";
 
 
@@ -97,7 +101,7 @@ export type ProblemInput = Static<typeof problemInputObject>;
 export function problemTool(
 	gate: PracticeGate,
 	graphNodes?: PracticeToolContext["graphNodes"],
-): AgentTool<typeof problemInputObject> {
+): LhTool<typeof problemInputObject> {
 	return {
 		name: "problem",
 		label: "problem",
@@ -133,7 +137,7 @@ export function problemTool(
 			if (normalized.every((t, i) => t === target[i])) return healed as never;
 			return { ...(healed as Record<string, unknown>), target: normalized } as never;
 		},
-		execute: async (_toolCallId, input) => {
+		execute: async (_toolCallId, input: ProblemInput) => {
 			if (gate.problemActive) {
 				return invalidInputResult("problem", [
 					"a problem is already active — call conclude on it before posing the next one",
@@ -196,7 +200,7 @@ export const concludeInputObject = Type.Object({
 
 export type ConcludeInput = Static<typeof concludeInputObject>;
 
-export function concludeTool(gate: PracticeGate): AgentTool<typeof concludeInputObject> {
+export function concludeTool(gate: PracticeGate): LhTool<typeof concludeInputObject> {
 	return {
 		name: "conclude",
 		label: "conclude",
@@ -209,7 +213,7 @@ export function concludeTool(gate: PracticeGate): AgentTool<typeof concludeInput
 		parameters: concludeInputObject,
 		prepareArguments: (args: unknown) => healEncodedArguments(args, concludeInputObject) as never,
 		executionMode: "sequential",
-		execute: async (_toolCallId, _input) => {
+		execute: async (_toolCallId, _input: ConcludeInput) => {
 			if (!gate.problemActive) {
 				return invalidInputResult("conclude", ["no active problem to conclude — pose one first"]);
 			}
@@ -220,7 +224,7 @@ export function concludeTool(gate: PracticeGate): AgentTool<typeof concludeInput
 }
 
 /** The practice toolset (the practice agent's whole registry). */
-export function practiceTools(ctx: PracticeToolContext): Record<string, AgentTool<any>> {
+export function practiceTools(ctx: PracticeToolContext): Record<string, LhTool<any>> {
 	// ONE gate per turn, shared by both tools — the intra-turn truth.
 	const gate = createPracticeGate(ctx);
 	// THE RARELY-NEEDED SET (owner round 10): read/ls/find/grep over the

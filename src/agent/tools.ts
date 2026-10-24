@@ -1,6 +1,5 @@
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { invalidInputResult, questionResult, serverExecute } from "./tool-execute.ts";
+import { invalidInputResult, questionResult, serverExecute, type LhTool } from "./tool-execute.ts";
 import {
 	askInputSchema,
 	askOptionProblems,
@@ -76,7 +75,7 @@ function prepareQuestionArguments<T extends object>(args: unknown): T {
 	return args as T;
 }
 
-export const askUserQuestionTool: AgentTool<typeof askInputSchema> = {
+export const askUserQuestionTool: LhTool<typeof askInputSchema> = {
 	name: "ask_user_question",
 	label: "ask_user_question",
 	description:
@@ -202,7 +201,7 @@ function explainDescription(name: "explain" | "recall", nodeId: boolean): string
  *  that habit (the tools_fails_2 incident). Distinct names make the
  *  phase boundary visible in the transcript itself: history written by
  *  `probe` never lies about what `quiz` requires. */
-export const probeQuizTool: AgentTool<typeof probeQuizInputSchema> = {
+export const probeQuizTool: LhTool<typeof probeQuizInputSchema> = {
 	name: "probe",
 	label: "probe",
 	description: quizDescription({ name: "probe", nodeId: false, types: false }),
@@ -220,7 +219,7 @@ export const probeQuizTool: AgentTool<typeof probeQuizInputSchema> = {
  *  teach quiz — phases/plan recognize BOTH tool names). */
 export function teachExplainToolFor(
 	ctx: Pick<PlanToolContext, "chatId" | "chatStore">,
-): AgentTool<typeof explainInputObject> {
+): LhTool<typeof explainInputObject> {
 	return {
 		name: "explain",
 		label: "explain",
@@ -246,7 +245,7 @@ export function teachExplainToolFor(
  *  probe call shape into teaching. Old probe-phase records keep the
  *  `explain` name and parse identically (the display seam accepts
  *  both). */
-export const probeExplainTool: AgentTool<typeof explainInputBase> = {
+export const probeExplainTool: LhTool<typeof explainInputBase> = {
 	name: "recall",
 	label: "recall",
 	description: explainDescription("recall", false),
@@ -288,7 +287,7 @@ export interface ProberToolContext extends ProbeDoneContext {
 export function createProberTools(
 	ctx: ProberToolContext,
 	enabled?: EnabledTools,
-): Record<string, AgentTool<any>> {
+): Record<string, LhTool<any>> {
 	// probe_done is re-added AFTER the filter, always-on by construction — it
 	// is how the phase ENDS; a prober that can never conclude is a lockout.
 	const done = probeDoneTool(ctx);
@@ -307,10 +306,10 @@ export function createProberTools(
 	// teach tools so the schema boundary is visible to the model.
 	const mechanics = quizMechanics(enabled);
 	// The armed quizzing tool, widened to the registry's heterogeneous
-	// AgentTool record BEFORE the filter (a conditional spread of two
+	// LhTool record BEFORE the filter (a conditional spread of two
 	// differently-typed literals makes the whole object's type a union —
-	// unusable as Record<string, AgentTool<any>> downstream).
-	const quizzing: Record<string, AgentTool<any>> =
+	// unusable as Record<string, LhTool<any>> downstream).
+	const quizzing: Record<string, LhTool<any>> =
 		mechanics === "free" ? { recall: probeExplainTool } : { probe: probeQuizTool };
 	// healToolRecord (owner, 2026-10-09 — the whitehead generalization):
 	// the standard argument heal over the WHOLE registry — every tool,
@@ -374,7 +373,7 @@ function nodeIdProblem(ctx: Pick<PlanToolContext, "chatId" | "chatStore">, nodeI
  *  nodeId is REQUIRED (owner ruling 2026-09-26): the untagged ad-hoc quiz is
  *  gone — off-map checks route through ask_user_question, and the teach
  *  seam (first tagged quiz) is structurally guaranteed. */
-export function teachQuizToolFor(ctx: Pick<PlanToolContext, "chatId" | "chatStore">): AgentTool<typeof quizInputObject> {
+export function teachQuizToolFor(ctx: Pick<PlanToolContext, "chatId" | "chatStore">): LhTool<typeof quizInputObject> {
 	return {
 		name: "quiz",
 		label: "quiz",
@@ -438,14 +437,14 @@ function withoutMechanics(enabled?: EnabledTools): EnabledTools | undefined {
 export function createTeacherTools(
 	ctx: TeacherToolContext,
 	enabled?: EnabledTools,
-): Record<string, AgentTool<any>> {
+): Record<string, LhTool<any>> {
 	// Quizzing mechanics (owner 2026-09-27): free-recall swaps the teach
 	// quiz for the teach explain — one quizzing tool at a time, whichever
 	// the settings arm. ask stays always-on.
 	const mechanics = quizMechanics(enabled);
 	// Same widening as the prober's (see above) — the conditional spread of
 	// two differently-typed literals collapses into an unusable union type.
-	const quizzing: Record<string, AgentTool<any>> =
+	const quizzing: Record<string, LhTool<any>> =
 		mechanics === "free" ? { explain: teachExplainToolFor(ctx) } : { quiz: teachQuizToolFor(ctx) };
 	// healToolRecord — same standard as the prober's registry (above).
 	return healToolRecord(

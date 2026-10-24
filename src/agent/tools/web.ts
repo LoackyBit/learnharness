@@ -1,6 +1,5 @@
 import { Type } from "typebox";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { serverExecute } from "../tool-execute.ts";
+import { serverExecute, type LhTool } from "../tool-execute.ts";
 // The search-hit shape lives in the core port since the search wave
 // (2026-09-20); this alias keeps callers churn-free.
 import type { SearchHit as WebSearchResult, SearchProvider } from "../../core/search.ts";
@@ -135,7 +134,7 @@ const webFetchInput = Type.Object({
 	url: Type.String({ description: "The URL to fetch" }),
 });
 
-export function createWebTools(search: () => SearchProvider | null): Record<string, AgentTool<any>> {
+export function createWebTools(search: () => SearchProvider | null): Record<string, LhTool<any>> {
 	return {
 		web_search: {
 			name: "web_search",
