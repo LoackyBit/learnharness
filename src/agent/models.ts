@@ -1,86 +1,187 @@
-import {
-	clampThinkingLevel,
-	createModels,
-	getSupportedThinkingLevels,
-	type Api,
-	type Model,
-	type Models,
-	type StreamFunction,
-} from "@earendil-works/pi-ai";
-import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { type ModelRole } from "../../config.ts";
 import { DEFAULT_THINKING_ORDER } from "../core/settings.ts";
+import type { ThinkingLevel } from "../core/contracts/messages.ts";
 import packageMetadata from "../../package.json" with { type: "json" };
 
-/** App identity is immutable and shared by Models and every native Agent.
- * Agent's default Pi attribution otherwise overrides the Models identity. */
+/** App identity is immutable and shared by Models and every native Agent. */
 export const APP_IDENTITY = Object.freeze({
 	userAgent: Object.freeze({ custom: `learnharness/${packageMetadata.version}` }),
 	attribution: Object.freeze({ name: packageMetadata.name, url: packageMetadata.homepage }),
 });
 
-/**
- * The one engine factory every agent's model comes from (the pi-ai swap,
- * docs/pi-engine-swap.md). BYOK ALL THE WAY DOWN (owner, 2026-09-22):
- * there are no factory pins — every engine resolves from a RESOLVED SPEC
- * (the settings chain's output) and the one builder here wires it to
- * pi-ai's federated catalogs.
- *
- * An "engine" is the model + the stream function the agent loop runs on —
- * the two things a test fake replaces. Production engines resolve the model
- * from pi-ai's static catalogs and stream through the same Models
- * collection.
- */
-
-export interface PiEngine {
-	model: Model<Api>;
-	streamFn: StreamFunction;
-	/** The resolved (config-or-settings, CLAMPED) thinking level —
-	 *  observability + tests; the streamFn pins it anyway. */
-	level?: ThinkingLevel;
-}
-
 export type { ThinkingLevel };
 
-let collection: ReturnType<typeof createModels> | undefined;
-
-/** The process-wide pi-ai Models collection — EVERY builtin provider's
- *  catalog (model slots wave, 2026-09-20): engines and the picker resolve
- *  against all of pi-ai's per-provider catalogs, so a settings slot can pin
- *  any native model id. Auth is resolved per request by pi-ai itself from
- *  the environment (the keys seam reflects file-saved keys into env), and
- *  a provider with no key simply fails its stream with "not configured" —
- *  honest, late, and unreachable through the picker, which gates on
- *  keyPresent. */
-export function piModels() {
-	if (!collection) {
-		collection = createModels({ identity: APP_IDENTITY });
-		for (const provider of builtinProviders()) collection.setProvider(provider);
-	}
-	return collection;
-}
-
-/** OpenRouter API key (BYOK); tests never read this — they inject engines. */
-export function openRouterApiKey(): string | undefined {
-	return process.env.OPENROUTER_API_KEY || undefined;
-}
-
-/** A fully-resolved model pin — the shape every engine now comes from:
- *  the settings-resolution chain's output (role override → slot, or the
- *  chat's conversation chain). thinkingLevel is OPTIONAL: unset means
- *  the baked default resolves here (owner 2026-09-22) — the first entry
- *  of DEFAULT_THINKING_ORDER the model supports. */
-export interface ResolvedModelSpec {
-	provider: string;
+/**
+ * Native Antigravity model description.
+ */
+export interface AntigravityModel {
 	id: string;
-	thinkingLevel?: ThinkingLevel;
+	name: string;
+	provider: "antigravity";
+	reasoning: boolean;
+	input: ("text" | "image")[];
+	supportedLevels: ThinkingLevel[];
+	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+	contextWindow: number;
+	maxTokens: number;
+	api?: string;
 }
 
-/** The first entry of the baked default order the model supports (owner,
- *  2026-09-22). A non-reasoning model reports exactly ["off"], so the
- *  order walk lands there naturally. */
-function defaultThinkingLevel(model: Model<Api>): ThinkingLevel {
+/**
+ * The curated list of native Antigravity CLI models.
+ */
+export const ANTIGRAVITY_MODELS: readonly AntigravityModel[] = Object.freeze([
+	Object.freeze({
+		id: "gemini-3.8-flash-high",
+		name: "Gemini 3.8 Flash High",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text", "image"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 1_048_576,
+		maxTokens: 65_536,
+		api: "antigravity",
+	}),
+	Object.freeze({
+		id: "gemini-3.8-flash-medium",
+		name: "Gemini 3.8 Flash Medium",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text", "image"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 1_048_576,
+		maxTokens: 65_536,
+		api: "antigravity",
+	}),
+	Object.freeze({
+		id: "gemini-3.8-flash-low",
+		name: "Gemini 3.8 Flash Low",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text", "image"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 1_048_576,
+		maxTokens: 65_536,
+		api: "antigravity",
+	}),
+	Object.freeze({
+		id: "claude-sonnet-4-6",
+		name: "Claude Sonnet 4.6",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text", "image"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 200_000,
+		maxTokens: 64_000,
+		api: "antigravity",
+	}),
+	Object.freeze({
+		id: "claude-opus-4-6-thinking",
+		name: "Claude Opus 4.6 Thinking",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text", "image"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 200_000,
+		maxTokens: 64_000,
+		api: "antigravity",
+	}),
+	Object.freeze({
+		id: "gpt-oss-120b-medium",
+		name: "GPT-OSS 120B Medium",
+		provider: "antigravity",
+		reasoning: true,
+		input: ["text"] as ("text" | "image")[],
+		supportedLevels: ["low", "medium", "high", "xhigh", "max"] as ThinkingLevel[],
+		cost: Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+		contextWindow: 128_000,
+		maxTokens: 16_384,
+		api: "antigravity",
+	}),
+]);
+
+/**
+ * Returns the default Antigravity model (Gemini 3.8 Flash High).
+ */
+export function getDefaultModel(): AntigravityModel {
+	const model = ANTIGRAVITY_MODELS[0];
+	if (!model) {
+		throw new Error("Antigravity catalog is empty");
+	}
+	return model;
+}
+
+const ORDERED_LEVELS: readonly ThinkingLevel[] = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+] as const;
+
+/**
+ * Computes supported thinking levels for a model.
+ */
+export function getSupportedThinkingLevels(model: {
+	reasoning?: boolean;
+	supportedLevels?: readonly ThinkingLevel[] | ThinkingLevel[];
+}): ThinkingLevel[] {
+	if (!model.reasoning) {
+		return ["off"];
+	}
+	if (model.supportedLevels && model.supportedLevels.length > 0) {
+		return [...model.supportedLevels];
+	}
+	return ["low", "medium", "high", "xhigh", "max"];
+}
+
+/**
+ * Clamps a requested thinking level to the nearest level supported by the model.
+ */
+export function clampThinkingLevel(
+	model: {
+		reasoning?: boolean;
+		supportedLevels?: readonly ThinkingLevel[] | ThinkingLevel[];
+	},
+	level: ThinkingLevel,
+): ThinkingLevel {
+	const available = getSupportedThinkingLevels(model);
+	if (available.includes(level)) {
+		return level;
+	}
+	const requestedIdx = ORDERED_LEVELS.indexOf(level);
+	if (requestedIdx === -1) {
+		return available[0] ?? "off";
+	}
+	for (let i = requestedIdx; i < ORDERED_LEVELS.length; i++) {
+		const candidate = ORDERED_LEVELS[i];
+		if (candidate && available.includes(candidate)) {
+			return candidate;
+		}
+	}
+	for (let i = requestedIdx - 1; i >= 0; i--) {
+		const candidate = ORDERED_LEVELS[i];
+		if (candidate && available.includes(candidate)) {
+			return candidate;
+		}
+	}
+	return available[0] ?? "off";
+}
+
+/**
+ * The first entry of the baked default order the model supports.
+ */
+export function defaultThinkingLevel(model: {
+	reasoning?: boolean;
+	supportedLevels?: readonly ThinkingLevel[] | ThinkingLevel[];
+}): ThinkingLevel {
 	const supported = getSupportedThinkingLevels(model);
 	for (const level of DEFAULT_THINKING_ORDER) {
 		if (supported.includes(level)) return level;
@@ -88,45 +189,88 @@ function defaultThinkingLevel(model: Model<Api>): ThinkingLevel {
 	return supported[0] ?? "off";
 }
 
-/** The production engine for a RESOLVED spec (model slots wave,
- *  2026-09-20): provider-aware catalog lookup + thinking clamp. The API
- *  key is resolved by pi-ai itself from the environment per request (the
- *  keys seam reflects file-saved keys into env), so the engine never
- *  hardcodes OpenRouter's. */
-export function piEngineForSpec(spec: ResolvedModelSpec): PiEngine {
-	const models: Models = piModels();
-	const model = models.getModel(spec.provider, spec.id);
+/**
+ * Models collection interface compatible with existing callers.
+ */
+export interface AntigravityModelsCollection {
+	getProviders(): { id: string; name: string }[];
+	getModels(providerId?: string): readonly AntigravityModel[];
+	getModel(provider: string, id: string): AntigravityModel | undefined;
+}
+
+export function antigravityModels(): AntigravityModelsCollection {
+	return {
+		getProviders: () => [{ id: "antigravity", name: "Antigravity" }],
+		getModels: (providerId?: string) => {
+			if (providerId && providerId !== "antigravity") return [];
+			return ANTIGRAVITY_MODELS;
+		},
+		getModel: (provider: string, id: string) => {
+			if (provider !== "antigravity") return undefined;
+			return ANTIGRAVITY_MODELS.find((m) => m.id === id);
+		},
+	};
+}
+
+export const piModels = antigravityModels;
+
+/** OpenRouter API key; legacy helper kept for backward compatibility. */
+export function openRouterApiKey(): string | undefined {
+	return process.env.OPENROUTER_API_KEY || undefined;
+}
+
+/**
+ * A resolved model specification.
+ */
+export interface ResolvedModelSpec {
+	provider: string;
+	id: string;
+	thinkingLevel?: ThinkingLevel;
+}
+
+export type StreamFunction = (model: any, context: any, options?: any) => any;
+
+/**
+ * Antigravity execution engine shape.
+ */
+export interface AntigravityEngine {
+	model: AntigravityModel | any;
+	streamFn: StreamFunction;
+	/** The resolved (config-or-settings, CLAMPED) thinking level */
+	level?: ThinkingLevel;
+}
+
+export type PiEngine = AntigravityEngine;
+
+/**
+ * Resolves an engine for the given model specification.
+ */
+export function antigravityEngineForSpec(spec: ResolvedModelSpec): AntigravityEngine {
+	const model = ANTIGRAVITY_MODELS.find(
+		(m) => m.id === spec.id && (spec.provider === "antigravity" || !spec.provider),
+	);
 	if (!model) {
 		throw new Error(`${spec.provider} catalog has no model ${spec.id}`);
 	}
-	// UNSET level → the baked default order (first entry the model
-	// supports); SET level → pi's native nearest-clamp (model swaps keep
-	// the user's intent and adapt honestly).
 	const level = spec.thinkingLevel
 		? clampThinkingLevel(model, spec.thinkingLevel)
 		: defaultThinkingLevel(model);
 	return {
 		model,
 		level,
-		// bound streamSimple: the agent loop forwards state.thinkingLevel as
-		// `reasoning` (undefined = off on pi-ai's scale); the clamp above keeps
-		// the pin honest even when config or settings drift off the map.
-		streamFn: (requestModel, context, options) =>
-			models.streamSimple(requestModel, context, {
-				...options,
-				reasoning: level === "off" ? undefined : level,
-			}),
+		streamFn: async () => {},
 	};
 }
 
-/** The LEGACY role entry point — BYOK made it an honest THROWER (owner,
- *  2026-09-22): no factory pins exist to fall back to, and this module
- *  cannot read settings (architecture law — the agent layer never
- *  imports the server layer). Production resolves the chain in
- *  chat-handler and ALWAYS injects engines; reaching this means a
- *  wiring bug, so it fails loudly instead of guessing a model. */
-export function piEngineFor(role: ModelRole): PiEngine {
+export const piEngineForSpec = antigravityEngineForSpec;
+
+/**
+ * Legacy role entry point.
+ */
+export function antigravityEngineFor(role: ModelRole): AntigravityEngine {
 	throw new Error(
 		`no configured model for role "${role}" — set your model slots (settings → models)`,
 	);
 }
+
+export const piEngineFor = antigravityEngineFor;
