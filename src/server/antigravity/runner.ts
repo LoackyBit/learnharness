@@ -254,10 +254,11 @@ export async function* runAgyStream(
 
 			const ev = parseAgyNdjsonLine(line);
 			if (ev) {
+				yield ev;
 				if (ev.type === "result" || ev.type === "error") {
 					yieldedTerminal = true;
+					break;
 				}
-				yield ev;
 			}
 		}
 

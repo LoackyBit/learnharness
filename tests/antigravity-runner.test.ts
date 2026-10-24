@@ -227,6 +227,12 @@ if (args.includes("--test-abort")) {
 } else if (args.includes("--test-error-exit")) {
 	process.stderr.write("Fatal CLI failure\\n");
 	process.exit(2);
+} else if (args.includes("--test-stay-alive-after-result")) {
+	process.stdout.write(JSON.stringify({ event: "result", result: { status: "SUCCESS" } }) + "\\n");
+	process.on("SIGTERM", () => {
+		process.exit(0);
+	});
+	setInterval(() => {}, 500);
 } else {
 	// Read full prompt from stdin
 	let stdinData = "";
@@ -367,6 +373,23 @@ if (args.includes("--test-abort")) {
 			}
 
 			assert.equal(receivedFirst, true);
+		});
+
+		it("terminates stream immediately when terminal result event is received even if process keeps running", async () => {
+			const events: AgyStreamEvent[] = [];
+			const options: AgyRunOptions = {
+				prompt: "Result stay alive",
+				agyPath: mockAgyPath,
+				extraArgs: ["--test-stay-alive-after-result"],
+			};
+
+			for await (const ev of runAgyStream(options)) {
+				events.push(ev);
+			}
+
+			assert.equal(events.length, 1);
+			assert.equal(events[0]!.type, "result");
+			assert.equal(events[0]!.status, "SUCCESS");
 		});
 	});
 });

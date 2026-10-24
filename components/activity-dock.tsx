@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ActivityIcon, BotIcon, FileTextIcon, PenToolIcon, PlayIcon, SearchIcon, SquareIcon, WaypointsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CallUsage, JobKind, JobRecord } from "@/src/core";
@@ -486,13 +487,13 @@ function ActivityBlobRow({
 							</div>
 						)}
 						{blob.chatId.startsWith("src_") ? (
-							<a href="/" className="text-primary hover:underline">
+							<Link href="/" className="text-primary hover:underline">
 								View graph →
-							</a>
+							</Link>
 						) : (
-							<a href={`/chat/${blob.chatId}`} className="text-primary hover:underline">
+							<Link href={`/chat/${blob.chatId}`} className="text-primary hover:underline">
 								Open session →
-							</a>
+							</Link>
 						)}
 					</div>
 					<div className="mt-2 text-muted-foreground/80">
