@@ -66,12 +66,46 @@ import {
 	type ModelCatalogEntry,
 	type ModelSlotName,
 	type ModelsSettings,
+	type ThinkingLevel,
 } from "@/src/core";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { prettyModel } from "@/components/usage-format";
+import { prettyModel as basePrettyModel } from "@/components/usage-format";
 import { cn } from "@/lib/utils";
 import { SettingsGroup, SettingsRow, Toggle, CommitInput } from "./controls.tsx";
 import { ModelMenuList, ThinkingMenuList } from "./model-menu";
+
+const ANTIGRAVITY_NAMES: Record<string, string> = {
+	"gemini-3.8-flash-high": "Gemini 3.8 Flash High",
+	"gemini-3.8-flash-medium": "Gemini 3.8 Flash Medium",
+	"gemini-3.8-flash-low": "Gemini 3.8 Flash Low",
+	"claude-sonnet-4-6": "Claude Sonnet 4.6",
+	"claude-opus-4-6-thinking": "Claude Opus 4.6 Thinking",
+	"gpt-oss-120b-medium": "GPT-OSS 120B Medium",
+};
+
+export function prettyModel(id: string): string {
+	const bare = id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
+	if (ANTIGRAVITY_NAMES[bare]) {
+		return ANTIGRAVITY_NAMES[bare];
+	}
+	return basePrettyModel(id);
+}
+
+const THINKING_EFFORT_LEVELS: readonly ThinkingLevel[] = ["low", "medium", "high", "max"];
+
+const EFFORT_LEVEL_MAP: Record<string, ThinkingLevel> = {
+	off: "low",
+	minimal: "low",
+	low: "low",
+	medium: "medium",
+	high: "high",
+	xhigh: "max",
+	max: "max",
+};
+
+export function mapThinkingEffortLevel(level: string | undefined): ThinkingLevel | undefined {
+	if (!level) return undefined;
+	return EFFORT_LEVEL_MAP[level] ?? (level as ThinkingLevel);
+}
 
 /** One slot's display identity — the tier's roster as the row hint rides
  *  with the resolved default (owner: the hint ALWAYS names the default). */
@@ -88,7 +122,7 @@ const SEARCH_ENGINES = ["tavily", "brave"] as const;
  *  changing — the Teacher stream settled this 2026-09-19). */
 export const TOGGLE_TOOLS = ["research", "demo", "visual", "pdf"] as const;
 
-const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+const THINKING_LEVELS: readonly ThinkingLevel[] = ["low", "medium", "high", "max"];
 
 /** SegmentInfo as GET /api/settings/prompts returns it. */
 interface SegmentInfo {
@@ -635,7 +669,12 @@ export function AgentSection({
 					// catalog); the standard ladder as the last fallback.
 					const coord = override?.model ?? pin?.model;
 					const chosen = coord ? catalog?.find((m) => m.id === coord.id && m.provider === coord.provider) : undefined;
-					const levels = chosen ? chosen.supportedLevels : THINKING_LEVELS;
+					const rawLevels = chosen ? chosen.supportedLevels : THINKING_LEVELS;
+					const mappedLevels = Array.from(
+						new Set(rawLevels.map((l) => EFFORT_LEVEL_MAP[l] ?? l)),
+					).filter((l): l is ThinkingLevel => THINKING_EFFORT_LEVELS.includes(l as ThinkingLevel));
+					const levels = mappedLevels.length > 0 ? mappedLevels : THINKING_LEVELS;
+					const effectiveThinking = mapThinkingEffortLevel(thinking);
 					const thisMenuOpen = openMenu?.target === slot ? openMenu.kind : null;
 					// Vision slots pick from image-capable models only.
 					const slotCatalog =
@@ -666,7 +705,7 @@ export function AgentSection({
 									// Legacy display (chunk 2 item 4): no stored level + a known
 									// model → the RESOLVED level (the ordering's first supported —
 									// what the engine build runs). Display-only until a pick writes.
-									value={thinking || (chosen ? defaultOrderLevel(levels) : "")}
+									value={effectiveThinking || (chosen ? defaultOrderLevel(levels) : "")}
 									emptyLabel="—"
 									ariaLabel={`${SLOT_META[slot].label} thinking`}
 									testid={`slot-thinking-${slot}`}
@@ -690,7 +729,8 @@ export function AgentSection({
 												// fresh pick writes a level — the stored one rides as-is
 												// (the write clamps server-side), else the ordering's level.
 												const next = populateLevel(thinking || undefined, entry.supportedLevels);
-												onModelsChange(composeSlotModel(models, slot, entry.provider, entry.id, next));
+												const mappedNext = EFFORT_LEVEL_MAP[next] ?? next;
+												onModelsChange(composeSlotModel(models, slot, entry.provider, entry.id, mappedNext));
 												setOpenMenu(null);
 											}}
 											footer={
@@ -712,9 +752,10 @@ export function AgentSection({
 											levels={levels.map(String)}
 											// The ✓ sits on the RESOLVED level for legacy unset records —
 											// the same one the trigger shows.
-											effectiveLevel={thinking || (chosen ? defaultOrderLevel(levels) : undefined)}
+											effectiveLevel={effectiveThinking || (chosen ? defaultOrderLevel(levels) : undefined)}
 											onPick={(level) => {
-												onModelsChange(composeSlotModel(models, slot, provider, modelId, level));
+												const mapped = EFFORT_LEVEL_MAP[level] ?? (level as ThinkingLevel);
+												onModelsChange(composeSlotModel(models, slot, provider, modelId, mapped));
 												setOpenMenu(null);
 											}}
 										/>

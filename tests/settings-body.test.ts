@@ -247,21 +247,31 @@ describe("SETTINGS_SECTIONS (the route's section map)", () => {
 describe("parseModelsSettingsBody (model slots wave, 2026-09-20)", () => {
 	it("parses the three slot tiers — model required, level rides (BYOK, owner 2026-09-22)", () => {
 		const r = parseModelsSettingsBody({
-			strong: { model: { provider: "openrouter", id: "z-ai/glm-5.3-flash" } },
-			cheap: { model: { provider: "zai", id: "glm-5.3-flash" }, thinkingLevel: "high" },
-			vision: { model: { provider: "zai", id: "glm-5.3-flash" }, thinkingLevel: "low" },
+			strong: { model: { provider: "antigravity", id: "gemini-3.8-flash-high" } },
+			cheap: { model: { provider: "antigravity", id: "gemini-3.8-flash-medium" }, thinkingLevel: "high" },
+			vision: { model: { provider: "antigravity", id: "claude-sonnet-4-6" }, thinkingLevel: "low" },
 		});
 		assert.ok(r.ok);
 		assert.deepEqual(r.settings, {
-			strong: { model: { provider: "openrouter", id: "z-ai/glm-5.3-flash" } },
-			cheap: { model: { provider: "zai", id: "glm-5.3-flash" }, thinkingLevel: "high" },
-			vision: { model: { provider: "zai", id: "glm-5.3-flash" }, thinkingLevel: "low" },
+			strong: { model: { provider: "antigravity", id: "gemini-3.8-flash-high" } },
+			cheap: { model: { provider: "antigravity", id: "gemini-3.8-flash-medium" }, thinkingLevel: "high" },
+			vision: { model: { provider: "antigravity", id: "claude-sonnet-4-6" }, thinkingLevel: "low" },
 		});
 		// a thinkingLevel WITHOUT a model can never run (no factory floor)
 		const levelOnly = parseModelsSettingsBody({ cheap: { thinkingLevel: "high" } });
 		assert.equal(levelOnly.ok, false);
 		if (!levelOnly.ok) {
 			assert.match(levelOnly.error, /slot "cheap" must set a model/);
+		}
+	});
+
+	it("rejects unknown providers for slots (only antigravity supported)", () => {
+		const bad = parseModelsSettingsBody({
+			strong: { model: { provider: "openrouter", id: "gemini-3.8-flash-high" } },
+		});
+		assert.equal(bad.ok, false);
+		if (!bad.ok) {
+			assert.match(bad.error, /unknown provider "openrouter" \(supported: antigravity\)/);
 		}
 	});
 

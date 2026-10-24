@@ -11,7 +11,7 @@
  * a different concern and are preserved by the sanitizer (core/settings.ts).
  */
 
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "../core";
 import { isHexColor, type ChatSettings } from "../core";
 import type {
 	AgentSettings,
@@ -341,6 +341,9 @@ export function parseModelsSettingsBody(body: unknown): SettingsBodyResult<Model
 		// absent slot key clears the tier (replace-whole section).
 		if (!parsed.override.model) {
 			return { ok: false, error: `slot "${key}" must set a model (thinkingLevel alone cannot run — absent slot = unset)` };
+		}
+		if (parsed.override.model.provider !== "antigravity") {
+			return { ok: false, error: `unknown provider "${parsed.override.model.provider}" (supported: antigravity)` };
 		}
 		settings[key as (typeof MODEL_SLOTS)[number]] = parsed.override;
 	}
