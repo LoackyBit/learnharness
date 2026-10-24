@@ -13,8 +13,6 @@
  * ready | submitted | streaming | error.
  */
 
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import {
 	needsContinuation,
 	newAnswerResult,
@@ -23,13 +21,30 @@ import {
 	newThinkingMessage,
 	newUserMessage,
 	projectView,
+	type AgentMessage,
 	type ChatInput,
 	type LhMarkerMessage,
 	type LhMessage,
 	type LhViewMessage,
 	type LiveExecution,
 	type QuestionAnswerData,
+	type ToolResultMessage,
 } from "../src/core";
+
+/**
+ * Native wire event emitted across the turn stream for UI updates.
+ */
+export type AgentEvent =
+	| { type: "agent_start" }
+	| { type: "agent_end"; messages?: AgentMessage[] }
+	| { type: "turn_start" }
+	| { type: "turn_end"; message?: AgentMessage; toolResults: ToolResultMessage[] }
+	| { type: "message_start"; message: AgentMessage }
+	| { type: "message_update"; message: AgentMessage; assistantMessageEvent?: unknown }
+	| { type: "message_end"; message: AgentMessage }
+	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args?: unknown }
+	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args?: unknown; partialResult?: unknown }
+	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result?: unknown; isError: boolean; durationMs?: number };
 
 export type SessionStatus = "ready" | "submitted" | "streaming" | "error";
 

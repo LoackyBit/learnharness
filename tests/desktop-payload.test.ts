@@ -45,8 +45,6 @@ describe("desktop standalone payload", () => {
 				write(path.join(STANDALONE, extra));
 			}
 			const runtime = [
-				"node_modules/@earendil-works/pi-ai/dist/index.js",
-				"node_modules/@earendil-works/pi-agent-core/dist/index.js",
 				"node_modules/@napi-rs/canvas-darwin-arm64/skia.darwin-arm64.node",
 				"node_modules/@resvg/resvg-js-win32-x64-msvc/resvgjs.win32-x64-msvc.node",
 				"node_modules/electron-updater/out/main.js",

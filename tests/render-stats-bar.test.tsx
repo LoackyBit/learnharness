@@ -80,6 +80,9 @@ describe("stats bar", () => {
 	it("prettyModel strips vendor + date suffix, keeps dashes", () => {
 		assert.equal(prettyModel("z-ai/glm-5.3-flash"), "glm-5.3-flash"); // dashes kept (owner round 5)
 		assert.equal(prettyModel("qwen/qwen3.8-max-0902"), "qwen3.8-max");
+		assert.equal(prettyModel("gemini-3.8-flash-high"), "gemini-3.8-flash-high");
+		assert.equal(prettyModel("claude-sonnet-4-6"), "claude-sonnet-4"); // trailing numeric version segment stripped
+		assert.equal(prettyModel("gpt-oss-120b-medium"), "gpt-oss-120b-medium");
 	});
 
 	it("provider-qualified stamps (usage contract, model-slots wave)", () => {
@@ -87,10 +90,14 @@ describe("stats bar", () => {
 		// the same model via two providers different bookkeeping
 		assert.equal(prettyModel("openrouter:z-ai/glm-5.3-flash", true), "glm-5.3-flash · openrouter");
 		assert.equal(prettyModel("openai:gpt-5.2", true), "gpt-5.2 · openai");
+		assert.equal(prettyModel("antigravity:gemini-3.8-flash-high", true), "gemini-3.8-flash-high · antigravity");
+		assert.equal(prettyModel("antigravity:claude-sonnet-4-6", true), "claude-sonnet-4 · antigravity");
 		// unqualified on a qualified stamp: provider silently dropped (old shape)
 		assert.equal(prettyModel("openrouter:z-ai/glm-5.3-flash"), "glm-5.3-flash");
+		assert.equal(prettyModel("antigravity:gemini-3.8-flash-high"), "gemini-3.8-flash-high");
 		// qualified on a bare id: no suffix invented
 		assert.equal(prettyModel("z-ai/glm-5.3-flash", true), "glm-5.3-flash");
+		assert.equal(prettyModel("gemini-3.8-flash-high", true), "gemini-3.8-flash-high");
 	});
 });
 
@@ -114,6 +121,8 @@ describe("catalogLimits (the stats-bar live-limits join, pure)", () => {
 		models: [
 			entry({ id: "z-ai/glm-5.3-flash", provider: "openrouter", contextWindow: 1_048_576 }),
 			entry({ id: "gpt-x", provider: "openai", contextWindow: 400_000 }),
+			entry({ id: "gemini-3.8-flash-high", provider: "antigravity", contextWindow: 1_048_576 }),
+			entry({ id: "claude-sonnet-4-6", provider: "antigravity", contextWindow: 200_000 }),
 		],
 	};
 
@@ -121,7 +130,9 @@ describe("catalogLimits (the stats-bar live-limits join, pure)", () => {
 		const limits = catalogLimits(catalog);
 		assert.equal(limits.get("openrouter:z-ai/glm-5.3-flash"), 1_048_576);
 		assert.equal(limits.get("openai:gpt-x"), 400_000);
-		assert.equal(limits.size, 2);
+		assert.equal(limits.get("antigravity:gemini-3.8-flash-high"), 1_048_576);
+		assert.equal(limits.get("antigravity:claude-sonnet-4-6"), 200_000);
+		assert.equal(limits.size, 4);
 	});
 
 	it("a model missing from the index is absent — limit null, usage-only (never a fallback)", () => {

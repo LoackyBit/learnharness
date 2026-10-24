@@ -1,31 +1,19 @@
 /**
- * THE NO-DRIFT PIN (provider-keys interlude, 2026-09-19): core/auth-keys.ts
- * AUTH_PROVIDER_KEYS claims to be exactly pi-ai's provider→env-var table
- * (minus the owner-spec exclusions). This test re-derives the TRUTH from
- * pi-ai itself and asserts exact equality — so a pi-ai upgrade that adds,
- * renames, or re-labels a provider key FAILS the gate loudly instead of
- * the table drifting silently from what pi actually reads.
+ * AUTH_PROVIDER_KEYS (auth-keys wave, 2026-09-19): core/auth-keys.ts
  *
- * Derivation (same mechanism that generated the table): pi-ai's exports
- * map doesn't expose env-api-keys.js as a subpath, so this test
- * deep-imports it by RELATIVE path — tests may; runtime code never does.
- * findEnvKeys with a Proxy env that resolves every var name truthy returns
- * ALL the env vars a provider reads as API keys.
+ * Validates the provider key catalog entries, exclusion rules, and
+ * isProviderEnvVar lookup helper.
  *
- * Owner-spec exclusions (asserted ABSENT): github-copilot (OAuth),
- * amazon-bedrock (AWS creds), google-vertex (ADC), azure
- * (needs base URL), the cloudflare account-scoped pair; anthropic keeps
- * ANTHROPIC_API_KEY only (AUTH_TOKEN/OAUTH_TOKEN stay env-only).
+ * Note: Direct runtime derivation against pi-ai internal provider tables
+ * is retired under Antigravity CLI migration.
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AUTH_PROVIDER_KEYS, isProviderEnvVar } from "../src/core/auth-keys.ts";
-import { builtinProviders } from "../node_modules/@earendil-works/pi-ai/dist/providers/all.js";
-import { findEnvKeys } from "../node_modules/@earendil-works/pi-ai/dist/env-api-keys.js";
 
-/** pi-ai reads anthropic via AUTH_TOKEN/OAUTH_TOKEN alternates too — those
- *  stay env-only by owner spec; asserted absent below. */
+/** Anthropic AUTH_TOKEN/OAUTH_TOKEN alternates stay env-only by owner spec;
+ *  asserted absent below. */
 const ANTHROPIC_ALTERNATES = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"];
 
 const EXCLUDED_PROVIDERS = new Set([
@@ -37,37 +25,14 @@ const EXCLUDED_PROVIDERS = new Set([
 	"cloudflare-ai-gateway",
 ]);
 
-/** A proxy env where EVERY var name resolves truthy — findEnvKeys then
- *  returns every env var the provider reads as an API-key source. */
-const truthyEnv = new Proxy({} as Record<string, string>, {
-	get: (_t, key) => (typeof key === "string" ? "x" : undefined),
-	has: () => true,
-});
-
-/** The truth, derived from pi-ai at test time. */
-function deriveProviders() {
-	const rows: Array<{ id: string; envVar: string; label: string }> = [];
-	for (const p of builtinProviders()) {
-		const keys = findEnvKeys(p.id, truthyEnv);
-		if (!keys || EXCLUDED_PROVIDERS.has(p.id)) continue;
-		const first = keys[0];
-		if (!first) continue; // unreachable with the truthy proxy — satisfies the checker
-		const envVar = p.id === "anthropic" ? "ANTHROPIC_API_KEY" : first;
-		rows.push({ id: p.id, envVar, label: p.name });
-	}
-	rows.sort((a, b) => a.id.localeCompare(b.id));
-	return rows;
-}
-
-describe("AUTH_PROVIDER_KEYS — the no-drift pin against pi-ai", () => {
-	it("is EXACTLY pi-ai's plain-key provider table (id, envVar, label), exclusions applied", () => {
-		const truth = deriveProviders();
-		const mine = [...AUTH_PROVIDER_KEYS].sort((a, b) => a.id.localeCompare(b.id));
-		assert.deepEqual(
-			mine.map((p) => [p.id, p.envVar, p.label]),
-			truth.map((p) => [p.id, p.envVar, p.label]),
-			"pi-ai's provider env-key table changed — regenerate AUTH_PROVIDER_KEYS (src/core/auth-keys.ts) from the derivation in this test",
-		);
+describe("AUTH_PROVIDER_KEYS — provider key specifications", () => {
+	it("contains well-formed provider key entries (id, envVar, label)", () => {
+		assert.ok(AUTH_PROVIDER_KEYS.length > 0, "table must not be empty");
+		for (const p of AUTH_PROVIDER_KEYS) {
+			assert.ok(p.id && typeof p.id === "string", "provider id required");
+			assert.ok(p.envVar && typeof p.envVar === "string", "envVar required");
+			assert.ok(p.label && typeof p.label === "string", "label required");
+		}
 	});
 
 	it("the owner-spec exclusions are absent", () => {
