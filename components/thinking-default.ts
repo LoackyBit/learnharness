@@ -12,8 +12,7 @@
  * wins, and after a swap the WRITE clamps server-side, the signal
  * re-reads, and the clamped truth displays).
  */
-import { DEFAULT_THINKING_ORDER } from "@/src/core";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { DEFAULT_THINKING_ORDER, type ThinkingLevel } from "@/src/core";
 
 /** Display labels for the levels (shared by every trigger that shows
  *  one). Lowercase, always (owner refinement round, 2026-09-24): the

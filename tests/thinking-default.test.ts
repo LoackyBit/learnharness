@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_THINKING_ORDER } from "../src/core/settings.ts";
 import { defaultOrderLevel, populateLevel } from "../components/thinking-default.ts";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "../src/core/contracts.ts";
 
 const tl = (levels: string[]) => levels as ThinkingLevel[];
 

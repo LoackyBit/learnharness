@@ -5,7 +5,7 @@
  * (which OWNS these shapes — the contract is defined here only so client
  * components never import from the server band).
  */
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "./messages.ts";
 import type { BackgroundModelRole, ModelSlotName } from "../settings.ts";
 
 /** One picker row: everything the UI shows about a model, projected from

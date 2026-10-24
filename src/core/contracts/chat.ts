@@ -5,7 +5,7 @@
  * is owned outright by its stream — cross-domain schema changes go through
  * master. Pure types + protocol docs + tiny pure helpers. See docs/vision.md.
  */
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "./messages.ts";
 import type { LhMessage } from "../native-messages.ts";
 import type { Phase3 } from "../phases.ts";
 import type { PlanNodeStatus, PlanTree } from "./plan.ts";
