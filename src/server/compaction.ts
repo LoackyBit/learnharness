@@ -27,8 +27,7 @@
  * marker's id.
  */
 
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentMessage, Usage } from "@/src/core";
 import {
 	activeCompactionOf,
 	buildCompactionPrompt,
